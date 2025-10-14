@@ -12,16 +12,23 @@ class Bot:
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
     
-    def send_message(self, chat_id, text: str):
-        httpx.get(self.api_url+"sendMessage", params={'chat_id': chat_id, "text": text})
+    def send_message(self, chat_id, text: str, parse_mode: str):
+        httpx.post(self.api_url+"sendMessage", json={'chat_id': chat_id, "text": text, 'parse_mode': parse_mode})
     
     def process_messages(self, message):
         text = message.get("text", "")
         chat_id = message['chat']['id']
         handled = self.handlers.get(text) or self.handlers.get("*")
-        
+        print(message)
         if handled:
-            self.send_message(chat_id, handled['text'])
+            self.send_message(chat_id, handled['text'].format(
+                first_name=message['from']['first_name'],
+                last_name=message['from']['last_name'],
+                full_name=f"{message['from']['first_name']} {message['from']['last_name']}",
+                message_text=message['text'],
+                user_id=message['from']['id'],
+                message_id=message['message_id']
+            ))
     
     def run(self):
         offset = 0
@@ -37,3 +44,4 @@ class Bot:
                     
             except Exception as e:
                 print("Error occured: ", e)
+                print(e.with_traceback(None))
