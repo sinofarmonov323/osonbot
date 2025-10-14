@@ -15,11 +15,11 @@ class Bot:
     def send_message(self, chat_id, text: str):
         httpx.get(self.api_url+"sendMessage", params={'chat_id': chat_id, "text": text})
     
-    def process_message(self, message):
+    def process_messages(self, message):
         text = message.get("text", "")
         chat_id = message['chat']['id']
         handled = self.handlers.get(text) or self.handlers.get("*")
-                    
+        
         if handled:
             self.send_message(chat_id, handled['text'])
     
@@ -33,16 +33,7 @@ class Bot:
                     if not message:
                         continue
 
-                    self.process_message(message)
+                    self.process_messages(message)
                     
             except Exception as e:
                 print("Error occured: ", e)
-
-
-# bot = Bot("8380176186:AAEwFZLcl_kGkQi8WLhQrCtFZD4EdxnMhms")
-
-# bot.when("/start", "hello")
-# bot.when("/help", "how can i assist you?")
-# bot.when("*", "Hello world")
-
-# bot.run()

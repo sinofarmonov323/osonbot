@@ -1,12 +1,5 @@
-from .bot import Bot, Video, Photo, Audio, KeyboardButton, InlineKeyboardButton, URLKeyboardButton, RemoveKeyboardButton
+from .bot import Bot
 
 __all__ = [
-    "Bot",
-    "Photo",
-    "Video",
-    "Audio",
-    "KeyboardButton",
-    "InlineKeyboardButton",
-    "URLKeyboardButton",
-    "RemoveKeyboardButton"
+    "Bot"
 ]
