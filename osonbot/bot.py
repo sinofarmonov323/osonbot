@@ -63,7 +63,7 @@ class Bot:
             self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
         elif isinstance(condition, list):
             for cond in condition:
-                self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+                self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
     
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
@@ -77,63 +77,71 @@ class Bot:
         httpx.post(self.api_url+"sendMessage", json=params)
     
     def send_photo(self, chat_id, photo: str, caption, reply_markup: list[list[str]] = None):
-        try:
+        # try:
             if os.path.exists(photo):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
                 with open(photo, 'rb') as p:
                     httpx.post(self.api_url+"sendPhoto", data=data, files={"photo": p})
-            elif "https://" in photo:
+            elif "https://" in photo or "http://" in photo:
                 json = {"chat_id": chat_id, "photo": photo, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 httpx.post(self.api_url+"sendPhoto", json=json)
-        except:
-            raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
+            else:
+                raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
+        # except:
+            # raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
 
     def send_video(self, chat_id, video: str, caption, reply_markup: list[list[str]] = None):
-        try:
+        # try:
             if os.path.exists(video):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
                 with open(video, 'rb') as v:
                     httpx.post(self.api_url+"sendVideo", data=data, files={"video": v})
-            elif "https://" in video:
+            elif "https://" in video or "http://" in video:
                 json = {"chat_id": chat_id, "video": video, 'caption': caption}
                 if reply_markup:
-                    data['reply_markup'] = reply_markup
+                    json['reply_markup'] = reply_markup
                 httpx.post(self.api_url+"sendVideo", json=json)
-        except:
-            raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
+            else:
+                raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
+        # except:
+            # raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
 
     def send_audio(self, chat_id, audio: str, caption, reply_markup: list[list[str]] = None):
-        try:
+        # try:
             if os.path.exists(audio):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
                 with open(audio, 'rb') as a:
                     httpx.post(self.api_url+"sendAudio", data=data, files={"audio": a})
-            elif "https://" in audio:
+            elif "https://" in audio or "http://" in audio:
                 json = {"chat_id": chat_id, "audio": audio, 'caption': caption, 'reply_markup': reply_markup}
                 if reply_markup:
-                    data['reply_markup'] = reply_markup
+                    json['reply_markup'] = reply_markup
                 httpx.post(self.api_url+"sendAudio", json=json)
-        except:
-            raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
+            else:
+                raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
+        # except:
+            # raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
     
     def send_voice(self, chat_id, voice: str, caption, reply_markup: list[list[str]] = None):
-        try:
+        # try:
             if os.path.exists(voice):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
                 with open(voice, 'rb') as v:
                     httpx.post(self.api_url+"sendVoice", data=data, files={"voice": v})
-        except:
-            raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {voice}")
+            else:
+                raise FileNotFoundError(f"file {voice} not found. Make sure it exists")
+        # except:
+        #     raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {voice}")
     
     def formatter(self, text: str, message):
         try:
