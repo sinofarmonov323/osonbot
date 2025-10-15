@@ -158,3 +158,17 @@ def KeyboardButton(*rows, resize_keyboard: bool = True, one_time_keyborad: bool 
         'resize_keyboard': resize_keyboard,
         'one_time_keyboard': one_time_keyborad
     }
+
+def InlineKeyboard(*rows):
+    keyboard = []
+    for row in rows:
+        keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
+        keyboard.append(keyboard_row)
+    return {"inline_keyboard": keyboard}
+
+def URLkeyboardButton(*rows):
+    keyboard = []
+    for row in rows:
+        keyboard_row = [{"text": text, "url": data} for text, data in row]
+        keyboard.append(keyboard_row)
+    return {"inline_keyboard": keyboard}
