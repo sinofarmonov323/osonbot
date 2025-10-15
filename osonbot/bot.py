@@ -52,19 +52,19 @@ class Bot:
         self.callback_handlers = {}
 
     def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
-        if isinstance(condition, str):
-            self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-        elif isinstance(condition, list):
+        if isinstance(condition, list):
             for cond in condition:
                 self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-    
+        else:
+            self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+
     def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
-        if isinstance(condition, str):
-            self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
-        elif isinstance(condition, list):
+        if isinstance(condition, list):
             for cond in condition:
                 self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-    
+        else:
+            self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
     
@@ -175,29 +175,32 @@ class Bot:
         self.send_message(chat_id, self.formatter(handled['text'], message))
     
     def process_messages(self, message):
-        text = message.get("text", "")
-        chat_id = message['chat']['id']
-        handled = self.handlers.get(text) or self.handlers.get("*")
-        
-        if not handled:
-            return
-
-        hv = handled['text']
-
-        if callable(hv):
-            hv(message)
-            return
-
-        if isinstance(handled['text'], Photo):
-            self.send_photo(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
-        elif isinstance(handled['text'], Video):
-            self.send_video(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
-        elif isinstance(handled['text'], Audio):
-            self.send_audio(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
-        elif isinstance(handled['text'], Voice):
-            self.send_voice(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
-        elif isinstance(handled['text'], str):
-            self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+        if "text" in message:
+            text = message.get("text", "")
+            chat_id = message['chat']['id']
+            handled = self.handlers.get(text) or self.handlers.get("*")
+            
+            if not handled:
+                return
+            
+            if callable(handled['text']):
+                handled['text'](message)
+            
+            if isinstance(handled['text'], Photo):
+                self.send_photo(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+            elif isinstance(handled['text'], Video):
+                self.send_video(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+            elif isinstance(handled['text'], Audio):
+                self.send_audio(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+            elif isinstance(handled['text'], Voice):
+                self.send_voice(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+            elif isinstance(handled['text'], str):
+                self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+        elif "photo" in message:
+            print()
+            chat_id = message['from']['id']
+            hv = self.handlers.get(Photo)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
     
     def run(self):
         logger.info("Bot successfully started")
