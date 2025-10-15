@@ -1,3 +1,4 @@
+import logging
 import os
 import httpx
 
@@ -28,16 +29,41 @@ class Voice:
         self.url = url
         self.caption = caption
 
+def setup_logger(name: str):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s", "%Y-%m-%d %H:%M:%S")
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    logger.addHandler(stream_handler)
+
+    return logger
+
+logger = setup_logger("osonbot")
 
 # Bot
 class Bot:
     def __init__(self, token):
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.handlers = {}
+        self.callback_handlers = {}
 
-    def when(self, condition: str, text: str, parse_mode: str = None, reply_markup: str = None):
-        if condition:
+    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
+        if isinstance(condition, str):
             self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+        elif isinstance(condition, list):
+            for cond in condition:
+                self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+    
+    def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
+        if isinstance(condition, str):
+            self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+        elif isinstance(condition, list):
+            for cond in condition:
+                self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
     
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
@@ -110,20 +136,50 @@ class Bot:
             raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {voice}")
     
     def formatter(self, text: str, message):
-        return text.format(
-                first_name=message['from']['first_name'],
-                last_name=message['from']['last_name'],
-                full_name=f"{message['from']['first_name']} {message['from']['last_name']}",
-                message_text=message['text'],
-                user_id=message['from']['id'],
-                message_id=message['message_id']
-            )
+        try:
+            return text.format(
+                    first_name=message['from']['first_name'],
+                    last_name=message['from']['last_name'],
+                    full_name=f"{message['from']['first_name']} {message['from']['last_name']}",
+                    message_text=message['text'],
+                    user_id=message['from']['id'],
+                    message_id=message['message_id']
+                )
+        except:
+            return text.format(
+                    first_name=message['chat']['first_name'],
+                    last_name=message['chat']['last_name'],
+                    full_name=f"{message['chat']['first_name']} {message['chat']['last_name']}",
+                    message_text=message['text'],
+                    user_id=message['from']['id'],
+                    message_id=message['message_id']
+                )
+
+    def process_callback(self, callback):
+        message = callback.get("message", {})
+        data = callback.get('data')
+        chat_id = message['chat']['id']
+        handled = self.callback_handlers.get(data)
+        
+        if not handled:
+            return
+
+        self.send_message(chat_id, self.formatter(handled['text'], message))
     
     def process_messages(self, message):
         text = message.get("text", "")
         chat_id = message['chat']['id']
         handled = self.handlers.get(text) or self.handlers.get("*")
         
+        if not handled:
+            return
+
+        hv = handled['text']
+
+        if callable(hv):
+            hv(message)
+            return
+
         if isinstance(handled['text'], Photo):
             self.send_photo(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
         elif isinstance(handled['text'], Video):
@@ -136,39 +192,43 @@ class Bot:
             self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
     
     def run(self):
+        logger.info("Bot successfully started")
         offset = 0
         while True:
             try:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
-                    message = update.get("message")
-                    if not message:
-                        continue
 
-                    self.process_messages(message)
+                    if "callback_query" in update:
+                        self.process_callback(update['callback_query'])
+                    elif "message" in update:
+                        self.process_messages(update['message'])
                     
             except Exception as e:
-                print("Error occured: ", e)
-                print(e.with_traceback(None))
+                logger.error("Error occured", exc_info=True)
 
-
-def KeyboardButton(*rows, resize_keyboard: bool = True, one_time_keyborad: bool = False):
+def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyborad: bool = False):
     return {
         "keyboard": list(rows),
         'resize_keyboard': resize_keyboard,
         'one_time_keyboard': one_time_keyborad
     }
 
-def InlineKeyboard(*rows):
+def InlineKeyboardButton(*rows: list[list[str, str]]):
     keyboard = []
     for row in rows:
         keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
         keyboard.append(keyboard_row)
     return {"inline_keyboard": keyboard}
 
-def URLkeyboardButton(*rows):
+def URLKeyboardButton(*rows: list[list[dict]]):
     keyboard = []
     for row in rows:
         keyboard_row = [{"text": text, "url": data} for text, data in row]
         keyboard.append(keyboard_row)
     return {"inline_keyboard": keyboard}
+
+def RemoveKeyboardButton():
+    return {
+        'remove_keyboard': True
+    }
