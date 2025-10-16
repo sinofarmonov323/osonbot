@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="osonbot",
-    version="1.0.3",
+    version="1.0.4",
     packages=find_packages(),
     requires=['httpx'],
     author="https://t.me/jackson_rodger",
