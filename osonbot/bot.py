@@ -29,6 +29,10 @@ class Voice:
         self.url = url
         self.caption = caption
 
+class Sticker:
+    def __init__(self, file_id):
+        self.file_id = file_id
+
 def setup_logger(name: str):
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
@@ -75,72 +79,92 @@ class Bot:
             params['reply_markup'] = reply_markup
         httpx.post(self.api_url+"sendMessage", json=params)
     
-    def send_photo(self, chat_id, photo: str, caption, reply_markup: list[list[str]] = None):
+    def send_photo(self, chat_id, photo: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
         # try:
             if os.path.exists(photo):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
                 with open(photo, 'rb') as p:
                     httpx.post(self.api_url+"sendPhoto", data=data, files={"photo": p})
             elif "https://" in photo or "http://" in photo:
                 json = {"chat_id": chat_id, "photo": photo, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
                 httpx.post(self.api_url+"sendPhoto", json=json)
             else:
                 raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
         # except:
             # raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
 
-    def send_video(self, chat_id, video: str, caption, reply_markup: list[list[str]] = None):
+    def send_video(self, chat_id, video: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
         # try:
             if os.path.exists(video):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
                 with open(video, 'rb') as v:
                     httpx.post(self.api_url+"sendVideo", data=data, files={"video": v})
             elif "https://" in video or "http://" in video:
                 json = {"chat_id": chat_id, "video": video, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
                 httpx.post(self.api_url+"sendVideo", json=json)
             else:
                 raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
         # except:
             # raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
 
-    def send_audio(self, chat_id, audio: str, caption, reply_markup: list[list[str]] = None):
+    def send_audio(self, chat_id, audio: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
         # try:
             if os.path.exists(audio):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
                 with open(audio, 'rb') as a:
                     httpx.post(self.api_url+"sendAudio", data=data, files={"audio": a})
             elif "https://" in audio or "http://" in audio:
                 json = {"chat_id": chat_id, "audio": audio, 'caption': caption, 'reply_markup': reply_markup}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
                 httpx.post(self.api_url+"sendAudio", json=json)
             else:
                 raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
         # except:
             # raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
     
-    def send_voice(self, chat_id, voice: str, caption, reply_markup: list[list[str]] = None):
+    def send_voice(self, chat_id, voice: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
         # try:
             if os.path.exists(voice):
                 data = {"chat_id": chat_id, 'caption': caption}
                 if reply_markup:
                     data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
                 with open(voice, 'rb') as v:
                     httpx.post(self.api_url+"sendVoice", data=data, files={"voice": v})
             else:
                 raise FileNotFoundError(f"file {voice} not found. Make sure it exists")
         # except:
         #     raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {voice}")
+    
+    def send_sticker(self, chat_id, sticker: str, reply_markup: dict = None):
+        params = {"chat_id": chat_id, "sticker": sticker}
+        if reply_markup:
+            params['reply_markup'] = reply_markup
+        httpx.post(self.api_url + "sendSticker", json=params)
     
     def formatter(self, text: str, message):
         try:
@@ -161,6 +185,8 @@ class Bot:
                     user_id=message['from']['id'],
                     message_id=message['message_id']
                 )
+    def get_me(self):
+        return httpx.get(self.api_url + "getMe").json()
 
     def process_callback(self, callback):
         message = callback.get("message", {})
@@ -172,9 +198,6 @@ class Bot:
             return
 
         self.send_message(chat_id, self.formatter(handled['text'], message))
-    
-    def get_me(self):
-        return httpx.get(self.api_url + "getMe").json()
     
     def process_messages(self, message):
         if "text" in message:
@@ -189,15 +212,18 @@ class Bot:
                 handled['text'](message)
             
             if isinstance(handled['text'], Photo):
-                self.send_photo(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+                self.send_photo(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
             elif isinstance(handled['text'], Video):
-                self.send_video(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+                self.send_video(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
             elif isinstance(handled['text'], Audio):
-                self.send_audio(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+                self.send_audio(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
             elif isinstance(handled['text'], Voice):
-                self.send_voice(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'])
+                self.send_voice(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(handled['text'], Sticker):
+                self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
             elif isinstance(handled['text'], str):
                 self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+        
         elif "photo" in message:
             chat_id = message['from']['id']
             hv = self.handlers.get(Photo)
@@ -227,14 +253,14 @@ def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyb
         'one_time_keyboard': one_time_keyborad
     }
 
-def InlineKeyboardButton(*rows: list[list[str, str]]):
+def InlineKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
     keyboard = []
     for row in rows:
         keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
         keyboard.append(keyboard_row)
     return {"inline_keyboard": keyboard}
 
-def URLKeyboardButton(*rows: list[list[dict]]):
+def URLKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
     keyboard = []
     for row in rows:
         keyboard_row = [{"text": text, "url": data} for text, data in row]
