@@ -3,45 +3,47 @@ import os
 import httpx
 import sqlite3
 
-# def create_table(table_name: str, **columns):
-#     if not columns:
-#         raise ValueError("You must provide at least one column.")
+def create_table(table_name: str, **columns):
+    if not columns:
+        raise ValueError("You must provide at least one column.")
 
-#     type_map = {
-#         int: "INTEGER",
-#         str: "TEXT",
-#         float: "REAL",
-#         bool: "INTEGER"
-#     }
+    type_map = {
+        int: "INTEGER",
+        str: "TEXT",
+        float: "REAL",
+        bool: "INTEGER"
+    }
 
-#     cols = []
-#     for name, py_type in columns.items():
-#         sqlite_type = type_map.get(py_type, "TEXT")
-#         cols.append(f"{name} {sqlite_type}")
+    cols = []
+    for name, py_type in columns.items():
+        sqlite_type = type_map.get(py_type, "TEXT")
+        cols.append(f"{name} {sqlite_type} UNIQUE")
 
-#     columns_def = ", ".join(cols)
-#     query = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
+    columns_def = ", ".join(cols)
+    query = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
 
-#     with sqlite3.connect("example.db") as conn:
-#         cur = conn.cursor()
-#         cur.execute(query)
+    with sqlite3.connect("database.db") as conn:
+        cur = conn.cursor()
+        cur.execute(query)
 
-# def add_data(table_name: str, username: )
+# def add_data(table_name: str, username: str, user_id: int):
+#     with sqlite3.connect("database.db") as con:
+#         cur = con.cursor()
+#         cur.execute(f"INSERT OR IGNORE INTO {table_name} ()")
 
-# def add_data2(table_name, **data):
-#     if not data:
-#         raise ValueError("You must provide at least one column and value.")
+def add_data(table_name, **data):
+    if not data:
+        raise ValueError("You must provide at least one column and value.")
 
-#     columns = ", ".join(data.keys())
-#     placeholders = ", ".join("?" for _ in data)
-#     values = tuple(data.values())
+    columns = ", ".join(data.keys())
+    placeholders = ", ".join("?" for _ in data)
+    values = tuple(data.values())
 
-#     query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders});"
+    query = f"INSERT OR IGNORE INTO {table_name} ({columns}) VALUES ({placeholders});"
 
-#     with sqlite3.connect("DB_NAME") as conn:
-#         cur = conn.cursor()
-#         cur.execute(query, values)
-#         print("✅ Data inserted successfully!")
+    with sqlite3.connect("database.db") as conn:
+        cur = conn.cursor()
+        cur.execute(query, values)
 
 # Exception
 class FileNotFoundOrInvalidURLError(Exception):
@@ -89,17 +91,18 @@ def setup_logger(name: str):
 
 # Bot
 class Bot:
-    def __init__(self, token, create_db=True):
+    def __init__(self, token, admin_id=None, create_db=True):
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.handlers = {}
         self.callback_handlers = {}
         self.logger = setup_logger("osonbot")
         self.create_db = create_db
+        self.admin_id = admin_id
+        if create_db:
+            create_table("users", username=str, user_id=int)
     
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
+    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: KeyboardButton = None):
         if condition:
-            # if self.create_db:
-                # create_table("users", username=str, user_id=int)
             if isinstance(condition, list):
                 for cond in condition:
                     self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
@@ -247,11 +250,15 @@ class Bot:
     
     def process_messages(self, message):
         chat_id = message['from']['id']
+
+        if self.create_db:
+            add_data("users", username=message['from']['username'], user_id=chat_id)
+
         if "text" in message:
             text = message.get("text", "")
             chat_id = message['chat']['id']
             handled = self.handlers.get(text) or self.handlers.get("*")
-            
+
             if not handled:
                 return
             
@@ -294,6 +301,15 @@ class Bot:
         elif "sticker" in message:
             hv = self.handlers.get(Sticker)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        
+    def admin_handler(self, message):
+        if not self.admin_id:
+            self.logger.error("Admin id is not set", exc_info=True)
+        
+        if message['from']['id'] == self.admin_id:
+            return "Welcome Admin!"
+        else:
+            return "/admin"
     
     def run(self):
         getme = self.get_me()
@@ -304,7 +320,7 @@ class Bot:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
 
-                    # self.when("/admin")
+                    self.when("/admin", self.admin_handler, reply_markup='')
 
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])
