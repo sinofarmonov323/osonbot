@@ -1,6 +1,47 @@
 import logging
 import os
 import httpx
+import sqlite3
+
+def create_table(table_name: str, **columns):
+    if not columns:
+        raise ValueError("You must provide at least one column.")
+
+    type_map = {
+        int: "INTEGER",
+        str: "TEXT",
+        float: "REAL",
+        bool: "INTEGER"
+    }
+
+    cols = []
+    for name, py_type in columns.items():
+        sqlite_type = type_map.get(py_type, "TEXT")
+        cols.append(f"{name} {sqlite_type}")
+
+    columns_def = ", ".join(cols)
+    query = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
+
+    with sqlite3.connect("example.db") as conn:
+        cur = conn.cursor()
+        cur.execute(query)
+
+# def add_data(table_name: str, username: )
+
+def add_data2(table_name, **data):
+    if not data:
+        raise ValueError("You must provide at least one column and value.")
+
+    columns = ", ".join(data.keys())
+    placeholders = ", ".join("?" for _ in data)
+    values = tuple(data.values())
+
+    query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders});"
+
+    with sqlite3.connect("DB_NAME") as conn:
+        cur = conn.cursor()
+        cur.execute(query, values)
+        print("✅ Data inserted successfully!")
 
 # Exception
 class FileNotFoundOrInvalidURLError(Exception):
@@ -48,25 +89,30 @@ def setup_logger(name: str):
 
 # Bot
 class Bot:
-    def __init__(self, token):
+    def __init__(self, token, create_db=True):
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.handlers = {}
         self.callback_handlers = {}
         self.logger = setup_logger("osonbot")
-
+        self.create_db = create_db
+    
     def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
-        if isinstance(condition, list):
-            for cond in condition:
-                self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-        else:
-            self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+        if condition:
+            if self.create_db:
+                create_table("users", username=str, user_id=int)
+            if isinstance(condition, list):
+                for cond in condition:
+                    self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+            else:
+                self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
 
     def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
-        if isinstance(condition, list):
-            for cond in condition:
-                self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-        else:
-            self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+        if condition:
+            if isinstance(condition, list):
+                for cond in condition:
+                    self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+            else:
+                self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
 
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
@@ -245,6 +291,8 @@ class Bot:
             try:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
+
+                    self.when("/admin")
 
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])

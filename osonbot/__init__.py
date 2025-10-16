@@ -1,7 +1,8 @@
-from .bot import Bot, Photo, Video, Audio, Voice, Sticker, KeyboardButton, RemoveKeyboardButton, InlineKeyboardButton, URLKeyboardButton
+from .bot import Bot, Photo, Video, Audio, Voice, Sticker, KeyboardButton, RemoveKeyboardButton, InlineKeyboardButton, URLKeyboardButton, CreateTable
 
 __all__ = [
     "Bot",
     "Photo", "Video", "Audio", "Voice", "Sticker",
-    "KeyboardButton", "RemoveKeyboardButton", "InlineKeyboardButton", "URLKeyboardButton"
+    "KeyboardButton", "RemoveKeyboardButton", "InlineKeyboardButton", "URLKeyboardButton",
+    "CreateTable"
 ]
