@@ -200,6 +200,7 @@ class Bot:
         self.send_message(chat_id, self.formatter(handled['text'], message))
     
     def process_messages(self, message):
+        chat_id = message['from']['id']
         if "text" in message:
             text = message.get("text", "")
             chat_id = message['chat']['id']
@@ -225,8 +226,15 @@ class Bot:
                 self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
         
         elif "photo" in message:
-            chat_id = message['from']['id']
             hv = self.handlers.get(Photo)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        
+        elif "video" in message:
+            hv = self.handlers.get(Video)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+
+        elif "sticker" in message:
+            hv = self.handlers.get(Sticker)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
     
     def run(self):
