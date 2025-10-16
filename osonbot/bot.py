@@ -257,7 +257,18 @@ class Bot:
             
             if callable(handled['text']):
                 returned = handled['text'](message)
-                print(returned)
+                if isinstance(returned, Photo):
+                    self.send_photo(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Video):
+                    self.send_video(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Audio):
+                    self.send_audio(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Voice):
+                    self.send_voice(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Sticker):
+                    self.send_sticker(chat_id, returned.file_id, reply_markup=handled['reply_markup'])
+                elif isinstance(returned, str):
+                    self.send_message(chat_id, self.formatter(returned, message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
             
             if isinstance(handled['text'], Photo):
                 self.send_photo(chat_id, handled['text'].url, caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
