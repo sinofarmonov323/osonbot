@@ -42,14 +42,13 @@ def setup_logger(name: str):
 
     return logger
 
-logger = setup_logger("osonbot")
-
 # Bot
 class Bot:
     def __init__(self, token):
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.handlers = {}
         self.callback_handlers = {}
+        self.logger = setup_logger("osonbot")
 
     def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
         if isinstance(condition, list):
@@ -174,6 +173,9 @@ class Bot:
 
         self.send_message(chat_id, self.formatter(handled['text'], message))
     
+    def get_me(self):
+        return httpx.get(self.api_url + "getMe").json()
+    
     def process_messages(self, message):
         if "text" in message:
             text = message.get("text", "")
@@ -203,7 +205,8 @@ class Bot:
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
     
     def run(self):
-        logger.info("Bot successfully started")
+        getme = self.get_me()
+        self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
         offset = 0
         while True:
             try:
@@ -216,7 +219,7 @@ class Bot:
                         self.process_messages(update['message'])
                     
             except Exception as e:
-                logger.error("Error occured", exc_info=True)
+                self.logger.error("Error occured", exc_info=True)
 
 def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyborad: bool = False):
     return {
