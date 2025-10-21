@@ -100,8 +100,8 @@ class Bot:
         self.admin_id = admin_id
         if create_db:
             create_table("users", username=str, user_id=int)
-    
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: KeyboardButton = None):
+
+    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: list[list[str]] = None):
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
@@ -227,13 +227,14 @@ class Bot:
                 )
         except:
             return text.format(
-                    first_name=message['chat']['first_name'],
-                    last_name=message['chat']['last_name'],
-                    full_name=f"{message['chat']['first_name']} {message['chat']['last_name']}",
+                    first_name=message['chat']['first_name'] if 'first_name' in message['chat'] else "",
+                    last_name=message['chat']['last_name'] if 'last_name' in message['chat'] else "",
+                    full_name=f"{message['chat']['first_name'] if 'first_name' in message['chat'] else ''} {message['chat']['last_name'] if 'last_name' in message['chat'] else ''}",
                     message_text=message['text'],
                     user_id=message['from']['id'],
                     message_id=message['message_id']
                 )
+        
     def get_me(self):
         return httpx.get(self.api_url + "getMe").json()
 
