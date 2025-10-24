@@ -393,10 +393,10 @@ class Bot:
         elif "sticker" in message:
             hv = self.handlers.get(Sticker)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-        
-    def admin_handler(self, message):
+    
+    def _admin_handler(self, message):
         if not self.admin_id:
-            self.logger.error("Admin id is not set", exc_info=True)
+            self.logger.error("Admin id is not set")
         
         if message['from']['id'] == self.admin_id:
             return "Welcome Admin!"
@@ -412,7 +412,8 @@ class Bot:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
 
-                    self.when("/admin", self.admin_handler, reply_markup=KeyboardButton())
+                    self.when("/admin", self._admin_handler, reply_markup=KeyboardButton(['statistika📊']))
+                    self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data())}")
 
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])
