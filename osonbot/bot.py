@@ -293,15 +293,12 @@ class Bot:
                 self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
             elif isinstance(handled['text'], str):
                 self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
-        
         elif "photo" in message:
             hv = self.handlers.get(Photo)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-        
         elif "video" in message:
             hv = self.handlers.get(Video)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-
         elif "sticker" in message:
             hv = self.handlers.get(Sticker)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
