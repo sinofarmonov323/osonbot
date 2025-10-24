@@ -2,53 +2,142 @@ import logging
 import os
 import httpx
 import sqlite3
+from typing import Union
 
-def create_table(table_name: str, **columns):
-    if not columns:
-        raise ValueError("You must provide at least one column.")
+class Database:
+    def __init__(self, db_name: str):
+        self.db_name = db_name
+        self._table_name = None
+    
+    def _map_type(self, py_type: type) -> str:
+        type_map = {
+            int: "INTEGER",
+            str: "TEXT",
+            float: "REAL",
+            bool: "INTEGER"
+        }
+        return type_map.get(py_type, "TEXT")
 
-    type_map = {
-        int: "INTEGER",
-        str: "TEXT",
-        float: "REAL",
-        bool: "INTEGER"
-    }
+    def _table_exists(self, table_name: str) -> bool:
+        with sqlite3.connect(self.db_name) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+            return cur.fetchone() is not None
 
-    cols = []
-    for name, py_type in columns.items():
-        sqlite_type = type_map.get(py_type, "TEXT")
-        cols.append(f"{name} {sqlite_type} UNIQUE")
+    def _get_existing_columns(self, table_name: str) -> set[str]:
+        with sqlite3.connect(self.db_name) as conn:
+            cur = conn.cursor()
+            cur.execute(f"PRAGMA table_info({table_name});")
+            return {row[1] for row in cur.fetchall()}  # row[1] is column name
 
-    columns_def = ", ".join(cols)
-    query = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
+    def create_default_table(self, table_name: str, **columns: type):
+        """
+        Create the table if not exists. If it exists, add any missing columns.
+        Passing columns overwrites defaults (i.e. you supply exact columns you want).
+        """
 
-    with sqlite3.connect("database.db") as conn:
-        cur = conn.cursor()
-        cur.execute(query)
+        if not columns:
+            # If you want defaults when user omitted columns, uncomment:
+            # columns = {"username": str, "user_id": int}
+            raise ValueError("You must provide at least one column.")
 
-# def add_data(table_name: str, username: str, user_id: int):
-#     with sqlite3.connect("database.db") as con:
-#         cur = con.cursor()
-#         cur.execute(f"INSERT OR IGNORE INTO {table_name} ()")
+        self._table_name = table_name  # remember last created (or used) table
 
-def add_data(table_name, **data):
-    if not data:
-        raise ValueError("You must provide at least one column and value.")
+        # Build column definitions for CREATE TABLE
+        cols = []
+        for name, py_type in columns.items():
+            sqlite_type = self._map_type(py_type)
+            cols.append(f"{name} {sqlite_type} UNIQUE")
 
-    columns = ", ".join(data.keys())
-    placeholders = ", ".join("?" for _ in data)
-    values = tuple(data.values())
+        columns_def = ", ".join(cols)
+        create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
 
-    query = f"INSERT OR IGNORE INTO {table_name} ({columns}) VALUES ({placeholders});"
+        with sqlite3.connect(self.db_name) as conn:
+            cur = conn.cursor()
+            cur.execute(create_sql)
 
-    with sqlite3.connect("database.db") as conn:
-        cur = conn.cursor()
-        cur.execute(query, values)
+        # If table already existed, make sure missing columns are added
+        if self._table_exists(table_name):
+            existing = self._get_existing_columns(table_name)
+            # For each requested column not present, add it
+            for name, py_type in columns.items():
+                if name not in existing:
+                    col_type = self._map_type(py_type)
+                    alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {name} {col_type};"
+                    with sqlite3.connect(self.db_name) as conn:
+                        conn.execute(alter_sql)
+    
+    def create_table(self, table_name: str, **columns: type):
+        """
+        Drops the table (if exists) and creates it with the given columns.
+        WARNING: This destroys existing data in that table.
+        """
+        if not columns:
+            raise ValueError("You must provide at least one column.")
+        drop_sql = f"DROP TABLE IF EXISTS {table_name};"
+        cols = []
+        for name, py_type in columns.items():
+            sqlite_type = self._map_type(py_type)
+            cols.append(f"{name} {sqlite_type} UNIQUE")
+        create_sql = f"CREATE TABLE {table_name} ({', '.join(cols)});"
+        with sqlite3.connect(self.db_name) as conn:
+            conn.execute(drop_sql)
+            conn.execute(create_sql)
+        self._table_name = table_name
+
+    def add_data(self, table_name, **data):
+        if not data:
+            raise ValueError("You must provide at least one column and value.")
+
+        columns = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        values = tuple(data.values())
+
+        query = f"INSERT OR IGNORE INTO {table_name} ({columns}) VALUES ({placeholders});"
+
+        with sqlite3.connect(self.db_name) as conn:
+            cur = conn.cursor()
+            cur.execute(query, values)
+    
+    def get_data(self):
+        if not self._table_name:
+            raise ValueError("No table created yet.")
+        with sqlite3.connect(self.db_name) as con:
+            con.row_factory = sqlite3.Row
+            cur = con.cursor()
+            return [dict(row) for row in cur.execute(f"SELECT * FROM {self._table_name}").fetchall()]
 
 # Exception
 class FileNotFoundOrInvalidURLError(Exception):
     """Raised when a file does not exist or the provided URL is invalid."""
     pass
+
+# Buttons
+def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyborad: bool = False):
+    return {
+        "keyboard": list(rows),
+        'resize_keyboard': resize_keyboard,
+        'one_time_keyboard': one_time_keyborad
+    }
+
+def InlineKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
+    keyboard = []
+    for row in rows:
+        keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
+        keyboard.append(keyboard_row)
+    return {"inline_keyboard": keyboard}
+
+def URLKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
+    keyboard = []
+    for row in rows:
+        keyboard_row = [{"text": text, "url": data} for text, data in row]
+        keyboard.append(keyboard_row)
+    return {"inline_keyboard": keyboard}
+
+def RemoveKeyboardButton():
+    return {
+        'remove_keyboard': True
+    }
 
 
 # For sendinng media and handling
@@ -91,17 +180,19 @@ def setup_logger(name: str):
 
 # Bot
 class Bot:
-    def __init__(self, token, admin_id=None, create_db=True):
+    def __init__(self, token, auto_db: bool = True, db_name: str = "database.db", admin_id: int = None):
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.handlers = {}
         self.callback_handlers = {}
         self.logger = setup_logger("osonbot")
-        self.create_db = create_db
+        self.auto_db = auto_db
         self.admin_id = admin_id
-        if create_db:
-            create_table("users", username=str, user_id=int)
+        if auto_db:
+            db = Database(db_name)
+            self.db = db
+            self.db.create_default_table("users", username=str, user_id=int)
 
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: list[list[str]] = None):
+    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
@@ -120,7 +211,7 @@ class Bot:
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
     
-    def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: list[list[str]] = None):
+    def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         params = {'chat_id': chat_id, "text": text}
         if parse_mode:
             params['parse_mode'] = parse_mode
@@ -128,7 +219,7 @@ class Bot:
             params['reply_markup'] = reply_markup
         httpx.post(self.api_url+"sendMessage", json=params)
     
-    def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: list[list[str]] = None, parse_mode: str = None):
+    def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(photo):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -150,7 +241,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
 
-    def send_video(self, chat_id, video: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
+    def send_video(self, chat_id, video: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(video):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -172,7 +263,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
 
-    def send_audio(self, chat_id, audio: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
+    def send_audio(self, chat_id, audio: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(audio):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -194,7 +285,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
     
-    def send_voice(self, chat_id, voice: str, caption, reply_markup: list[list[str]] = None, parse_mode: str = None):
+    def send_voice(self, chat_id, voice: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(voice):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -255,8 +346,8 @@ class Bot:
     def process_messages(self, message):
         chat_id = message['from']['id']
 
-        if self.create_db:
-            add_data("users", username=message['from']['username'], user_id=chat_id)
+        if self.auto_db:
+            self.db.add_data("users", username=message['from']['username'], user_id=chat_id)
 
         if "text" in message:
             text = message.get("text", "")
@@ -321,7 +412,7 @@ class Bot:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
 
-                    self.when("/admin", self.admin_handler)
+                    self.when("/admin", self.admin_handler, reply_markup=KeyboardButton())
 
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])
@@ -330,29 +421,3 @@ class Bot:
                     
             except Exception as e:
                 self.logger.error("Error occured", exc_info=True)
-
-def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyborad: bool = False):
-    return {
-        "keyboard": list(rows),
-        'resize_keyboard': resize_keyboard,
-        'one_time_keyboard': one_time_keyborad
-    }
-
-def InlineKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
-    keyboard = []
-    for row in rows:
-        keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
-        keyboard.append(keyboard_row)
-    return {"inline_keyboard": keyboard}
-
-def URLKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
-    keyboard = []
-    for row in rows:
-        keyboard_row = [{"text": text, "url": data} for text, data in row]
-        keyboard.append(keyboard_row)
-    return {"inline_keyboard": keyboard}
-
-def RemoveKeyboardButton():
-    return {
-        'remove_keyboard': True
-    }
