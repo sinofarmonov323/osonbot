@@ -226,15 +226,18 @@ class Bot:
                     message_id=message['message_id']
                 )
         except:
-            return text.format(
-                    first_name=message['chat']['first_name'] if 'first_name' in message['chat'] else "",
-                    last_name=message['chat']['last_name'] if 'last_name' in message['chat'] else "",
-                    full_name=f"{message['chat']['first_name'] if 'first_name' in message['chat'] else ''} {message['chat']['last_name'] if 'last_name' in message['chat'] else ''}",
-                    message_text=message['text'],
-                    user_id=message['from']['id'],
-                    message_id=message['message_id']
-                )
-        
+            try:
+                return text.format(
+                        first_name=message['chat']['first_name'] if 'first_name' in message['chat'] else "",
+                        last_name=message['chat']['last_name'] if 'last_name' in message['chat'] else "",
+                        full_name=f"{message['chat']['first_name'] if 'first_name' in message['chat'] else ''} {message['chat']['last_name'] if 'last_name' in message['chat'] else ''}",
+                        message_text=message['text'],
+                        user_id=message['from']['id'],
+                        message_id=message['message_id']
+                    )
+            except:
+                return text
+    
     def get_me(self):
         return httpx.get(self.api_url + "getMe").json()
 
@@ -321,7 +324,7 @@ class Bot:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
 
-                    self.when("/admin", self.admin_handler, reply_markup='')
+                    self.when("/admin", self.admin_handler)
 
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])
