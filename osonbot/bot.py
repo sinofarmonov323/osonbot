@@ -349,6 +349,11 @@ class Bot:
         if self.auto_db:
             self.db.add_data("users", username=message['from']['username'], user_id=chat_id)
 
+        if self.admin_id:
+            if message['from']['id'] == self.admin_id:
+                self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(['statistika📊']))
+                self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data())}")
+
         if "text" in message:
             text = message.get("text", "")
             chat_id = message['chat']['id']
@@ -393,16 +398,7 @@ class Bot:
         elif "sticker" in message:
             hv = self.handlers.get(Sticker)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-    
-    def _admin_handler(self, message):
-        if not self.admin_id:
-            self.logger.error("Admin id is not set")
         
-        if message['from']['id'] == self.admin_id:
-            return "Welcome Admin!"
-        else:
-            return "/admin"
-    
     def run(self):
         getme = self.get_me()
         self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
@@ -411,9 +407,6 @@ class Bot:
             try:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
-
-                    self.when("/admin", self._admin_handler, reply_markup=KeyboardButton(['statistika📊']))
-                    self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data())}")
 
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])

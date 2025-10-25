@@ -1,14 +1,21 @@
-import typer
-import subprocess
+"""
+A command-line tool to watch a Python script and automatically restart it
+when the file is modified.
+
+Requires the 'watchdog' library: pip install watchdog
+"""
+
 import sys
 import time
+import subprocess
+import argparse
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-app = typer.Typer()
-
 class RestartOnChange(FileSystemEventHandler):
+    """Restarts a subprocess when the target file is modified."""
+
     def __init__(self, file):
         self.file = str(Path(file).resolve())
         self.process = None
@@ -16,26 +23,32 @@ class RestartOnChange(FileSystemEventHandler):
 
     def run_file(self):
         if self.process is not None and self.process.poll() is None:
+            print(f"Terminating process {self.process.pid}...")
             self.process.terminate()
-        print(f"▶️ Running {self.file}...")
-        self.process = subprocess.Popen([sys.executable, self.file])
+            self.process.wait()
+
+        print(f"Running {self.file}...")
+        try:
+            self.process = subprocess.Popen([sys.executable, self.file])
+        except Exception as e:
+            print(f"Error running file: {e}", file=sys.stderr)
+            self.process = None
 
     def on_modified(self, event):
         if str(Path(event.src_path).resolve()) == self.file:
             print(f"⚡ Change detected in {self.file}, restarting...")
             self.run_file()
 
-
 def watcher(file: str):
     file_path = Path(file).resolve()
+    path_to_watch = str(file_path.parent)
 
-    if not file_path.exists():
-        typer.echo(f"❌ File not found: {file_path}")
-        raise typer.Exit(code=1)
+    print(f"Watching {path_to_watch} for changes to {file_path.name}...")
 
     event_handler = RestartOnChange(file_path)
+
     observer = Observer()
-    observer.schedule(event_handler, str(file_path.parent), recursive=False)
+    observer.schedule(event_handler, path_to_watch, recursive=False)
     observer.start()
 
     try:
@@ -44,16 +57,36 @@ def watcher(file: str):
     except KeyboardInterrupt:
         observer.stop()
         if event_handler.process and event_handler.process.poll() is None:
+            print(f"Terminating final process {event_handler.process.pid}...")
             event_handler.process.terminate()
+            event_handler.process.wait()
+    
     observer.join()
+    print("Watcher stopped")
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Automatically restart a Python script when it's modified."
+    )
+    parser.add_argument(
+        "file",
+        metavar="FILE",
+        type=str,
+        help="The Python script to watch."
+    )
+    args = parser.parse_args()
 
-@app.command()
-def run(file: str = typer.Argument(..., help="Python file to run and watch for changes")):
-    """Run the given Python file and restart it when changed."""
-    typer.echo(f"🚀 Watching {file} for changes...")
-    watcher(file)
+    file_to_watch = Path(args.file)
 
+    if not file_to_watch.exists():
+        print(f"Error: File not found at {file_to_watch.resolve()}", file=sys.stderr)
+        sys.exit(1)
+    
+    if not file_to_watch.is_file():
+        print(f"Error: Path is not a file: {file_to_watch.resolve()}", file=sys.stderr)
+        sys.exit(1)
+
+    watcher(args.file)
 
 if __name__ == "__main__":
-    app()
+    main()
