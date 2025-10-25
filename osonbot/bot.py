@@ -401,7 +401,10 @@ class Bot:
         
     def run(self):
         getme = self.get_me()
-        self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
+        try:
+            self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
+        except:
+            raise Exception(f"No telegram bot found based on the token")
         offset = 0
         while True:
             try:
