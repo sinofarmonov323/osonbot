@@ -165,6 +165,10 @@ class Sticker:
     def __init__(self, file_id):
         self.file_id = file_id
 
+class Document:
+    def __init__(self, file_id):
+        self.file_id = file_id
+
 def setup_logger(name: str):
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
@@ -217,7 +221,7 @@ class Bot:
             params['parse_mode'] = parse_mode
         if reply_markup:
             params['reply_markup'] = reply_markup
-        httpx.post(self.api_url+"sendMessage", json=params)
+        return httpx.post(self.api_url+"sendMessage", json=params).json()['result']
     
     def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
@@ -228,14 +232,14 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(photo, 'rb') as p:
-                    httpx.post(self.api_url+"sendPhoto", data=data, files={"photo": p})
+                    return httpx.post(self.api_url+"sendPhoto", data=data, files={"photo": p}).json()
             elif "https://" in photo or "http://" in photo:
                 json = {"chat_id": chat_id, "photo": photo, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                httpx.post(self.api_url+"sendPhoto", json=json)
+                return httpx.post(self.api_url+"sendPhoto", json=json).json()
             else:
                 raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
         except:
@@ -250,14 +254,14 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(video, 'rb') as v:
-                    httpx.post(self.api_url+"sendVideo", data=data, files={"video": v})
+                    return httpx.post(self.api_url+"sendVideo", data=data, files={"video": v}).json()['result']
             elif "https://" in video or "http://" in video:
                 json = {"chat_id": chat_id, "video": video, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                httpx.post(self.api_url+"sendVideo", json=json)
+                return httpx.post(self.api_url+"sendVideo", json=json).json()['result']
             else:
                 raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
         except:
@@ -272,14 +276,14 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(audio, 'rb') as a:
-                    httpx.post(self.api_url+"sendAudio", data=data, files={"audio": a})
+                    return httpx.post(self.api_url+"sendAudio", data=data, files={"audio": a}).json()['result']
             elif "https://" in audio or "http://" in audio:
                 json = {"chat_id": chat_id, "audio": audio, 'caption': caption, 'reply_markup': reply_markup}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                httpx.post(self.api_url+"sendAudio", json=json)
+                return httpx.post(self.api_url+"sendAudio", json=json).json()['result']
             else:
                 raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
         except:
@@ -294,7 +298,7 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(voice, 'rb') as v:
-                    httpx.post(self.api_url+"sendVoice", data=data, files={"voice": v})
+                    return httpx.post(self.api_url+"sendVoice", data=data, files={"voice": v}).json()['result']
             else:
                 raise FileNotFoundError(f"file {voice} not found. Make sure it exists")
         except:
@@ -304,7 +308,37 @@ class Bot:
         params = {"chat_id": chat_id, "sticker": sticker}
         if reply_markup:
             params['reply_markup'] = reply_markup
-        httpx.post(self.api_url + "sendSticker", json=params)
+        return httpx.post(self.api_url + "sendSticker", json=params).json()['result']
+    
+    def send_document(self, chat_id, document: str, caption: str = None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+        try:
+            if os.path.exists(document):
+                data = {"chat_id": chat_id, 'caption': caption}
+                if reply_markup:
+                    data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
+                with open(document, 'rb') as v:
+                    return httpx.post(self.api_url+"senddocument", data=data, files={"document": v}).json()['result']
+            elif "https://" in document or "http://" in document:
+                json = {"chat_id": chat_id, "document": document, 'caption': caption}
+                if reply_markup:
+                    json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
+                return httpx.post(self.api_url+"senddocument", json=json).json()['result']
+            else:
+                raise FileNotFoundOrInvalidURLError(f"document not found or invalid URL: {document}")
+        except:
+            self.logger.error("Error occured: ", exc_info=True)
+
+    def edit_message_text(self, chat_id: int, message_id: int, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+        params = {'chat_id': chat_id, 'message_id': message_id, 'text': text}
+        if parse_mode:
+            params['parse_mode'] = parse_mode
+        if reply_markup:
+            params['reply_markup'] = reply_markup
+        return httpx.post(self.api_url + "editMessageText", json=params).json()['result']
     
     def formatter(self, text: str, message):
         try:
@@ -376,6 +410,8 @@ class Bot:
                     self.send_sticker(chat_id, returned.file_id, reply_markup=handled['reply_markup'])
                 elif isinstance(returned, str):
                     self.send_message(chat_id, self.formatter(returned, message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+                elif isinstance(returned, Document):
+                    self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
             
             if isinstance(handled['text'], Photo):
                 self.send_photo(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
@@ -389,6 +425,9 @@ class Bot:
                 self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
             elif isinstance(handled['text'], str):
                 self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+            elif isinstance(returned, Document):
+                self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+        
         elif "photo" in message:
             hv = self.handlers.get(Photo)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
@@ -397,6 +436,9 @@ class Bot:
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
         elif "sticker" in message:
             hv = self.handlers.get(Sticker)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        elif "document" in message:
+            hv = self.handlers.get(Document)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
         
     def run(self):
