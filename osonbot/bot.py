@@ -1,5 +1,6 @@
 import logging
 import os
+from types import SimpleNamespace
 import httpx
 import sqlite3
 from typing import Union
@@ -236,9 +237,15 @@ class Bot:
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
-                    self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+                    if next:
+                        self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup, 'next': next}
+                    else:
+                        self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
             else:
-                self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+                if next:
+                    self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup, 'next': next}
+                else:
+                    self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
 
     def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
         if condition:
@@ -476,7 +483,7 @@ class Bot:
         elif "document" in message:
             hv = self.handlers.get(Document)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-        
+
     def run(self):
         getme = self.get_me()
         try:
