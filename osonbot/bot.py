@@ -14,7 +14,8 @@ class Database:
             int: "INTEGER",
             str: "TEXT",
             float: "REAL",
-            bool: "INTEGER"
+            bool: "INTEGER",
+            bytes: "BLOB"
         }
         return type_map.get(py_type, "TEXT")
 
