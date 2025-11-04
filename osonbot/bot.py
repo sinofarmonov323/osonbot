@@ -495,7 +495,7 @@ class Bot:
             try:
                 for update in self.get_updates(offset).get("result", []):
                     offset = update['update_id'] + 1
-
+                
                     if "callback_query" in update:
                         self.process_callback(update['callback_query'])
                     elif "message" in update:

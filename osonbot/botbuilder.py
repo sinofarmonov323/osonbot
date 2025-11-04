@@ -10,9 +10,6 @@ class BotBuilder:
         self.bots = []
         self._load()
 
-    # ===============================
-    # 📦 Persistence
-    # ===============================
     def _load(self):
         try:
             with open(self.storage_file, "r", encoding="utf-8") as f:
@@ -24,14 +21,11 @@ class BotBuilder:
         with open(self.storage_file, "w", encoding="utf-8") as f:
             json.dump(self.bots, f, indent=2, ensure_ascii=False)
 
-    # ===============================
-    # 🤖 Bot management
-    # ===============================
     def add_bot(self, token: str, owner_id: int):
         """Add a new bot owned by a user."""
         for bot in self.bots:
             if bot["token"] == token:
-                return False  # already exists
+                return False
 
         new_bot = {
             "token": token,
@@ -42,7 +36,6 @@ class BotBuilder:
         self.bots.append(new_bot)
         self._save()
 
-        # Start this bot in a background thread
         threading.Thread(target=self._run_bot, args=(token,), daemon=True).start()
         return True
 
@@ -62,9 +55,6 @@ class BotBuilder:
                 return bot
         return None
 
-    # ===============================
-    # 🚀 Run bots
-    # ===============================
     def _run_bot(self, token: str):
         """Run a bot and handle its messages."""
         bot = Bot(token)
@@ -72,8 +62,7 @@ class BotBuilder:
         def handler(msg):
             chat_id = msg["chat"]["id"]
             text = msg.get("text", "")
-
-            # Find the bot’s command set
+            
             for b in self.bots:
                 if b["token"] == token:
                     for cmd in b["commands"]:
