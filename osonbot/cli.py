@@ -1,10 +1,4 @@
-"""
-A command-line tool to watch a Python script and automatically restart it
-when the file is modified.
-
-Requires the 'watchdog' library: pip install watchdog
-"""
-
+import logging
 import sys
 import time
 import subprocess
@@ -43,12 +37,12 @@ def watcher(file: str):
     file_path = Path(file).resolve()
     path_to_watch = str(file_path.parent)
 
-    print(f"Watching {path_to_watch} for changes to {file_path.name}...")
+    logging.info(f"Watching {path_to_watch} for changes to {file_path.name}...")
 
     event_handler = RestartOnChange(file_path)
 
     observer = Observer()
-    observer.schedule(event_handler, path_to_watch, recursive=False)
+    observer.schedule(event_handler, path_to_watch, recursive=True)
     observer.start()
 
     try:
@@ -79,11 +73,11 @@ def main():
     file_to_watch = Path(args.file)
 
     if not file_to_watch.exists():
-        print(f"Error: File not found at {file_to_watch.resolve()}", file=sys.stderr)
+        logging.error(f"Error: File not found at {file_to_watch.resolve()}", exc_info=True)
         sys.exit(1)
     
     if not file_to_watch.is_file():
-        print(f"Error: Path is not a file: {file_to_watch.resolve()}", file=sys.stderr)
+        logging.error(f"Error: Path is not a file: {file_to_watch.resolve()}", exc_info=True)
         sys.exit(1)
 
     watcher(args.file)

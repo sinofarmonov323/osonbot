@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import threading
 from types import SimpleNamespace
 import httpx
 import sqlite3
@@ -256,7 +258,12 @@ class Bot:
                 self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
 
     def get_updates(self, offset: int):
-        return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
+        try:
+            return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
+        except httpx.ConnectTimeout:
+            pass
+        except httpx.ConnectError:
+            raise Exception("Check your internet. internet required")
     
     def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         params = {'chat_id': chat_id, "text": text}
@@ -264,7 +271,12 @@ class Bot:
             params['parse_mode'] = parse_mode
         if reply_markup:
             params['reply_markup'] = reply_markup
-        return httpx.post(self.api_url+"sendMessage", json=params).json()['result']
+        try:
+            return httpx.post(self.api_url+"sendMessage", json=params).json()['result']
+        except httpx.ConnectTimeout:
+            pass
+        except httpx.ConnectError:
+            raise Exception("Check your internet. internet required")
     
     def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
@@ -500,6 +512,5 @@ class Bot:
                         self.process_callback(update['callback_query'])
                     elif "message" in update:
                         self.process_messages(update['message'])
-                    
             except Exception as e:
                 self.logger.error("Error occured", exc_info=True)
