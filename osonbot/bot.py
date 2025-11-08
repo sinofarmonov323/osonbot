@@ -1,8 +1,5 @@
-import asyncio
 import logging
 import os
-import threading
-from types import SimpleNamespace
 import httpx
 import sqlite3
 from typing import Union
