@@ -1,5 +1,4 @@
 import threading
-from jsonbot import JsonBot
 
 class BotBuilder:
     """
@@ -21,6 +20,8 @@ class BotBuilder:
                          "/help": {"response": "Need help?", "parse_mode": "MarkdownV2"}
                      }
         """
+        from jsonbot import JsonBot
+
         if token in self.bots:
             return False
         
