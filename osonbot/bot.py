@@ -239,15 +239,9 @@ class Bot:
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
-                    if next:
-                        self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup, 'next': next}
-                    else:
-                        self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+                    self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
             else:
-                if next:
-                    self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup, 'next': next}
-                else:
-                    self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+                self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
 
     def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
         if condition:
@@ -258,12 +252,7 @@ class Bot:
                 self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
 
     def get_updates(self, offset: int):
-        try:
-            return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
-        except httpx.ConnectTimeout:
-            pass
-        except httpx.ConnectError:
-            raise Exception("Check your internet. internet required")
+        return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
     
     def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         params = {'chat_id': chat_id, "text": text}
