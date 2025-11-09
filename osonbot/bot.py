@@ -232,7 +232,7 @@ class Bot:
             self.db = db
             self.db.create_default_table("users", username=str, user_id=int)
 
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[dict, None] = None):
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
@@ -251,20 +251,24 @@ class Bot:
     def get_updates(self, offset: int):
         return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
     
-    def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+    def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[dict, None] = None):
         params = {'chat_id': chat_id, "text": text}
         if parse_mode:
             params['parse_mode'] = parse_mode
         if reply_markup:
             params['reply_markup'] = reply_markup
         try:
-            return httpx.post(self.api_url+"sendMessage", json=params).json()['result']
+            data = httpx.post(self.api_url+"sendMessage", json=params).json()
+            if 'result' not in data:
+                return data
+            else:
+                return data['result']
         except httpx.ConnectTimeout:
             pass
         except httpx.ConnectError:
             raise Exception("Check your internet. internet required")
     
-    def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+    def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[dict, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(photo):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -286,7 +290,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
 
-    def send_video(self, chat_id, video: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+    def send_video(self, chat_id, video: str, caption, reply_markup: Union[dict, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(video):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -308,7 +312,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
 
-    def send_audio(self, chat_id, audio: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+    def send_audio(self, chat_id, audio: str, caption, reply_markup: Union[dict, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(audio):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -330,7 +334,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
     
-    def send_voice(self, chat_id, voice: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+    def send_voice(self, chat_id, voice: str, caption, reply_markup: Union[dict, None] = None, parse_mode: str = None):
         try:
             if os.path.exists(voice):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -351,7 +355,7 @@ class Bot:
             params['reply_markup'] = reply_markup
         return httpx.post(self.api_url + "sendSticker", json=params).json()['result']
     
-    def send_document(self, chat_id, document: str, caption: str = None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+    def send_document(self, chat_id, document: str, caption: str = None, parse_mode: str = None, reply_markup: Union[dict, None] = None):
         try:
             if os.path.exists(document):
                 data = {"chat_id": chat_id, 'caption': caption}
@@ -373,7 +377,7 @@ class Bot:
         except:
             self.logger.error("Error occured: ", exc_info=True)
 
-    def edit_message_text(self, chat_id: int, message_id: int, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+    def edit_message_text(self, chat_id: int, message_id: int, text: str, parse_mode: str = None, reply_markup: Union[dict, None] = None):
         params = {'chat_id': chat_id, 'message_id': message_id, 'text': text}
         if parse_mode:
             params['parse_mode'] = parse_mode
@@ -406,7 +410,7 @@ class Bot:
     
     def get_me(self):
         return httpx.get(self.api_url + "getMe").json()
-
+    
     def process_callback(self, callback):
         message = callback.get("message", {})
         data = callback.get('data')
@@ -415,8 +419,38 @@ class Bot:
         
         if not handled:
             return
-
-        self.send_message(chat_id, self.formatter(handled['text'], message))
+            
+        if callable(handled['text']):
+            returned = handled['text'](message)
+            if isinstance(returned, Photo):
+                self.send_photo(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(returned, Video):
+                self.send_video(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(returned, Audio):
+                self.send_audio(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(returned, Voice):
+                self.send_voice(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(returned, Sticker):
+                self.send_sticker(chat_id, returned.file_id, reply_markup=handled['reply_markup'])
+            elif isinstance(returned, str):
+                self.send_message(chat_id, self.formatter(returned, message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+            elif isinstance(returned, Document):
+                self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+        
+        if isinstance(handled['text'], Photo):
+            self.send_photo(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+        elif isinstance(handled['text'], Video):
+            self.send_video(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+        elif isinstance(handled['text'], Audio):
+            self.send_audio(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+        elif isinstance(handled['text'], Voice):
+            self.send_voice(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+        elif isinstance(handled['text'], Sticker):
+            self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
+        elif isinstance(handled['text'], str):
+            self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+        elif isinstance(returned, Document):
+            self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
     
     def process_messages(self, message):
         chat_id = message['from']['id']
@@ -471,7 +505,10 @@ class Bot:
         
         elif "photo" in message:
             hv = self.handlers.get(Photo)
-            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+            if callable(hv['text']):
+                hv['text'](message)
+            elif isinstance(hv['text'], str):
+                self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
         elif "video" in message:
             hv = self.handlers.get(Video)
             self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
