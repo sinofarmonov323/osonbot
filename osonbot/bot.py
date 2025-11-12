@@ -12,7 +12,7 @@ from .utils import (
     Document, 
     Sticker, 
     setup_logger, 
-    Message
+    Message, User, Chat
 )
 
 
@@ -39,6 +39,8 @@ class Bot:
         
         for cond in conditions:
             self.handlers[cond] = handler_data
+        
+        return self
 
     def c_when(self, condition: Union[str, list[str]], text: Union[str, Callable], parse_mode: Optional[str] = None, reply_markup: Optional[dict] = None):
         conditions = condition if isinstance(condition, list) else [condition]
@@ -50,6 +52,8 @@ class Bot:
         
         for cond in conditions:
             self.callback_handlers[cond] = handler_data
+        
+        return self
 
     def get_updates(self, offset: int) -> dict:
         try:
@@ -94,12 +98,7 @@ class Bot:
                     data["parse_mode"] = parse_mode
                 
                 with open(file_path, "rb") as f:
-                    response = httpx.post(
-                        self.api_url + method,
-                        data=data,
-                        files={file_param: f},
-                        timeout=60.0
-                    )
+                    response = httpx.post(self.api_url + method, data=data, files={file_param: f}, timeout=60.0)
                     return response.json().get("result", {})
             elif file_path.startswith(("http://", "https://")):
                 json_data = {"chat_id": chat_id, file_param: file_path}
@@ -112,7 +111,6 @@ class Bot:
                 
                 response = httpx.post(self.api_url + method, json=json_data, timeout=30.0)
                 return response.json().get("result", {})
-            
             else:
                 raise FileNotFoundOrInvalidURLError(
                     f"File not found or invalid URL: {file_path}"
@@ -142,12 +140,7 @@ class Bot:
         """Send a document"""
         return self._send_file("sendDocument", chat_id, document, "document", caption, reply_markup, parse_mode)
 
-    def send_sticker(
-        self, 
-        chat_id: int, 
-        sticker: str, 
-        reply_markup: Optional[dict] = None
-    ) -> dict:
+    def send_sticker(self, chat_id: int, sticker: str, reply_markup: Optional[dict] = None) -> dict:
         """Send a sticker"""
         params = {"chat_id": chat_id, "sticker": sticker}
         if reply_markup:
@@ -204,13 +197,14 @@ class Bot:
         """Send response based on handler type"""
         response = handler["text"]
         
-        # Call function if callable
+        if isinstance(response, str):
+            self.send_message(chat_id, self.formatter(response, message), reply_markup=handler['reply_markup'], parse_mode=handler['parse_mode'])
+
         if callable(response):
             result = response(Message(**message)) if "text" in message else response()
             if result:
                 return
         
-        # Send appropriate media type
         if isinstance(response, Photo):
             self.send_photo(
                 chat_id, 
@@ -284,11 +278,7 @@ class Bot:
         
         # Save user to database
         if self.auto_db and "from" in message:
-            self.db.add_data(
-                "users",
-                username=message["from"].get("username", ""),
-                user_id=message["from"].get("id")
-            )
+            self.db.add_data("users", username=message["from"].get("username", ""), user_id=message["from"].get("id"))
         
         if self.admin_id and message.get("from", {}).get("id") == self.admin_id:
             self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(["statistika📊"]))
