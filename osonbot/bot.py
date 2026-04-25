@@ -1,539 +1,329 @@
-import logging
 import os
 import httpx
-import sqlite3
-from typing import Union
-
-class Database:
-    def __init__(self, db_name: str):
-        self.db_name = db_name
-        self._table_name = None
-    
-    def _map_type(self, py_type: type) -> str:
-        type_map = {
-            int: "INTEGER",
-            str: "TEXT",
-            float: "REAL",
-            bool: "INTEGER",
-            bytes: "BLOB"
-        }
-        return type_map.get(py_type, "TEXT")
-
-    def _table_exists(self, table_name: str) -> bool:
-        with sqlite3.connect(self.db_name) as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
-            return cur.fetchone() is not None
-
-    def _get_existing_columns(self, table_name: str) -> set[str]:
-        with sqlite3.connect(self.db_name) as conn:
-            cur = conn.cursor()
-            cur.execute(f"PRAGMA table_info({table_name});")
-            return {row[1] for row in cur.fetchall()}  # row[1] is column name
-
-    def create_default_table(self, table_name: str, **columns: type):
-        """
-        Create the table if not exists. If it exists, add any missing columns.
-        Passing columns overwrites defaults (i.e. you supply exact columns you want).
-        """
-
-        if not columns:
-            # If you want defaults when user omitted columns, uncomment:
-            # columns = {"username": str, "user_id": int}
-            raise ValueError("You must provide at least one column.")
-
-        self._table_name = table_name  # remember last created (or used) table
-
-        # Build column definitions for CREATE TABLE
-        cols = []
-        for name, py_type in columns.items():
-            sqlite_type = self._map_type(py_type)
-            cols.append(f"{name} {sqlite_type} UNIQUE")
-
-        columns_def = ", ".join(cols)
-        create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
-
-        with sqlite3.connect(self.db_name) as conn:
-            cur = conn.cursor()
-            cur.execute(create_sql)
-
-        # If table already existed, make sure missing columns are added
-        if self._table_exists(table_name):
-            existing = self._get_existing_columns(table_name)
-            # For each requested column not present, add it
-            for name, py_type in columns.items():
-                if name not in existing:
-                    col_type = self._map_type(py_type)
-                    alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {name} {col_type};"
-                    with sqlite3.connect(self.db_name) as conn:
-                        conn.execute(alter_sql)
-    
-    def overwrite_table(self, table_name: str, **columns: type):
-        """
-        Drops the table (if exists) and creates it with the given columns.
-        WARNING: This destroys existing data in that table.
-        """
-        if not columns:
-            raise ValueError("You must provide at least one column.")
-        drop_sql = f"DROP TABLE IF EXISTS {table_name};"
-        cols = []
-        for name, py_type in columns.items():
-            sqlite_type = self._map_type(py_type)
-            cols.append(f"{name} {sqlite_type} UNIQUE")
-        create_sql = f"CREATE TABLE {table_name} ({', '.join(cols)});"
-        with sqlite3.connect(self.db_name) as conn:
-            conn.execute(drop_sql)
-            conn.execute(create_sql)
-        self._table_name = table_name
-
-    def add_data(self, table_name, **data):
-        if not data:
-            raise ValueError("You must provide at least one column and value.")
-
-        columns = ", ".join(data.keys())
-        placeholders = ", ".join("?" for _ in data)
-        values = tuple(data.values())
-
-        query = f"INSERT OR IGNORE INTO {table_name} ({columns}) VALUES ({placeholders});"
-
-        with sqlite3.connect(self.db_name) as conn:
-            cur = conn.cursor()
-            cur.execute(query, values)
-    
-    def get_data(self, table_name: str):
-        with sqlite3.connect(self.db_name) as con:
-            con.row_factory = sqlite3.Row
-            cur = con.cursor()
-            return [dict(row) for row in cur.execute(f"SELECT * FROM {table_name}").fetchall()]
-    
-    def create_table(self, table_name: str, **columns: type):
-        """
-        Create the table if not exists. If it exists, add any missing columns.
-        Passing columns overwrites defaults (i.e. you supply exact columns you want).
-        """
-
-        if not columns:
-            # If you want defaults when user omitted columns, uncomment:
-            # columns = {"username": str, "user_id": int}
-            raise ValueError("You must provide at least one column.")
-
-        self._table_name = table_name  # remember last created (or used) table
-
-        # Build column definitions for CREATE TABLE
-        cols = []
-        for name, py_type in columns.items():
-            sqlite_type = self._map_type(py_type)
-            cols.append(f"{name} {sqlite_type} UNIQUE")
-
-        columns_def = ", ".join(cols)
-        create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns_def});"
-
-        with sqlite3.connect(self.db_name) as conn:
-            cur = conn.cursor()
-            cur.execute(create_sql)
-
-        # If table already existed, make sure missing columns are added
-        if self._table_exists(table_name):
-            existing = self._get_existing_columns(table_name)
-            # For each requested column not present, add it
-            for name, py_type in columns.items():
-                if name not in existing:
-                    col_type = self._map_type(py_type)
-                    alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {name} {col_type};"
-                    with sqlite3.connect(self.db_name) as conn:
-                        conn.execute(alter_sql)
-
-# Exception
-class FileNotFoundOrInvalidURLError(Exception):
-    """Raised when a file does not exist or the provided URL is invalid."""
-    pass
-
-# Buttons
-def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyborad: bool = False):
-    return {
-        "keyboard": list(rows),
-        'resize_keyboard': resize_keyboard,
-        'one_time_keyboard': one_time_keyborad
-    }
-
-def InlineKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
-    keyboard = []
-    for row in rows:
-        keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
-        keyboard.append(keyboard_row)
-    return {"inline_keyboard": keyboard}
-
-def URLKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
-    keyboard = []
-    for row in rows:
-        keyboard_row = [{"text": text, "url": data} for text, data in row]
-        keyboard.append(keyboard_row)
-    return {"inline_keyboard": keyboard}
-
-def RemoveKeyboardButton():
-    return {
-        'remove_keyboard': True
-    }
+from typing import Union, Callable, Optional
+from .database import Database
+from .utils import (
+    FileNotFoundOrInvalidURLError, 
+    KeyboardButton, 
+    Photo, 
+    Video, 
+    Audio, 
+    Voice, 
+    Document, 
+    Sticker, 
+    setup_logger, 
+    Message
+)
 
 
-# For sendinng media and handling
-class Photo:
-    def __init__(self, url, caption=""):
-        self.url = url
-        self.caption = caption
-
-class Video:
-    def __init__(self, url, caption=""):
-        self.url = url
-        self.caption = caption
-
-class Audio:
-    def __init__(self, url, caption=""):
-        self.url = url
-        self.caption = caption
-
-class Voice:
-    def __init__(self, url, caption=""):
-        self.url = url
-        self.caption = caption
-
-class Sticker:
-    def __init__(self, file_id):
-        self.file_id = file_id
-
-class Document:
-    def __init__(self, file_id):
-        self.file_id = file_id
-
-def setup_logger(name: str):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s", "%Y-%m-%d %H:%M:%S")
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-
-    logger.addHandler(stream_handler)
-
-    return logger
-
-# Bot
 class Bot:
-    def __init__(self, token, auto_db: bool = True, db_name: str = "database.db", admin_id: int = None):
+    def __init__(self, token: str, auto_db: bool = True, db_name: str = "database.db", admin_id: Optional[int] = None):
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.handlers = {}
         self.callback_handlers = {}
         self.logger = setup_logger("osonbot")
         self.auto_db = auto_db
         self.admin_id = admin_id
+        
         if auto_db:
-            db = Database(db_name)
-            self.db = db
+            self.db = Database(db_name)
             self.db.create_default_table("users", username=str, user_id=int)
 
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[dict, None] = None):
-        if condition:
-            if isinstance(condition, list):
-                for cond in condition:
-                    self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-            else:
-                self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+    def when(self, condition: Union[str, list[str]], text: Union[str, Callable], parse_mode: Optional[str] = None, reply_markup: Optional[dict] = None):
+        conditions = condition if isinstance(condition, list) else [condition]
+        handler_data = {
+            "text": text, 
+            "parse_mode": parse_mode, 
+            "reply_markup": reply_markup
+        }
+        
+        for cond in conditions:
+            self.handlers[cond] = handler_data
 
-    def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
-        if condition:
-            if isinstance(condition, list):
-                for cond in condition:
-                    self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
-            else:
-                self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+    def c_when(self, condition: Union[str, list[str]], text: Union[str, Callable], parse_mode: Optional[str] = None, reply_markup: Optional[dict] = None):
+        conditions = condition if isinstance(condition, list) else [condition]
+        handler_data = {
+            "text": text, 
+            "parse_mode": parse_mode, 
+            "reply_markup": reply_markup
+        }
+        
+        for cond in conditions:
+            self.callback_handlers[cond] = handler_data
 
-    def get_updates(self, offset: int):
-        return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
-    
-    def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[dict, None] = None):
-        params = {'chat_id': chat_id, "text": text}
-        if parse_mode:
-            params['parse_mode'] = parse_mode
-        if reply_markup:
-            params['reply_markup'] = reply_markup
+    def get_updates(self, offset: int) -> dict:
         try:
-            data = httpx.post(self.api_url+"sendMessage", json=params).json()
-            if 'result' not in data:
-                return data
-            else:
-                return data['result']
-        except httpx.ConnectTimeout:
-            pass
+            response = httpx.get(
+                self.api_url + "getUpdates", 
+                params={"offset": offset},
+                timeout=30.0
+            )
+            return response.json()
+        except httpx.TimeoutException:
+            self.logger.warning("Request timeout while getting updates")
+            return {"result": []}
         except httpx.ConnectError:
-            raise Exception("Check your internet. internet required")
-    
-    def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[dict, None] = None, parse_mode: str = None):
-        try:
-            if os.path.exists(photo):
-                data = {"chat_id": chat_id, 'caption': caption}
-                if reply_markup:
-                    data['reply_markup'] = reply_markup
-                if parse_mode:
-                    data['parse_mode'] = parse_mode
-                with open(photo, 'rb') as p:
-                    return httpx.post(self.api_url+"sendPhoto", data=data, files={"photo": p}).json()
-            elif "https://" in photo or "http://" in photo:
-                json = {"chat_id": chat_id, "photo": photo, 'caption': caption}
-                if reply_markup:
-                    json['reply_markup'] = reply_markup
-                if parse_mode:
-                    json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"sendPhoto", json=json).json()
-            else:
-                raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
-        except:
-            self.logger.error("Error occured: ", exc_info=True)
+            self.logger.error("Connection error. Check your internet connection")
+            return {"result": []}
 
-    def send_video(self, chat_id, video: str, caption, reply_markup: Union[dict, None] = None, parse_mode: str = None):
+    def send_message(self, chat_id: int, text: str, parse_mode: Optional[str] = None, reply_markup: Optional[dict] = None) -> dict:
+        params = {"chat_id": chat_id, "text": text}
+        
+        if parse_mode:
+            params["parse_mode"] = parse_mode
+        if reply_markup:
+            params["reply_markup"] = reply_markup
+        
         try:
-            if os.path.exists(video):
-                data = {"chat_id": chat_id, 'caption': caption}
-                if reply_markup:
-                    data['reply_markup'] = reply_markup
-                if parse_mode:
-                    data['parse_mode'] = parse_mode
-                with open(video, 'rb') as v:
-                    return httpx.post(self.api_url+"sendVideo", data=data, files={"video": v}).json()['result']
-            elif "https://" in video or "http://" in video:
-                json = {"chat_id": chat_id, "video": video, 'caption': caption}
-                if reply_markup:
-                    json['reply_markup'] = reply_markup
-                if parse_mode:
-                    json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"sendVideo", json=json).json()['result']
-            else:
-                raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
-        except:
-            self.logger.error("Error occured: ", exc_info=True)
+            response = httpx.post(self.api_url + "sendMessage", json=params, timeout=30.0)
+            data = response.json()
+            return data.get("result", data)
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
+            self.logger.error(f"Error sending message: {e}")
+            return {}
 
-    def send_audio(self, chat_id, audio: str, caption, reply_markup: Union[dict, None] = None, parse_mode: str = None):
+    def _send_file(self, method: str, chat_id: int, file_path: str, file_param: str, caption: Optional[str] = None, reply_markup: Optional[dict] = None, parse_mode: Optional[str] = None) -> dict:
         try:
-            if os.path.exists(audio):
-                data = {"chat_id": chat_id, 'caption': caption}
+            if os.path.exists(file_path):
+                data = {"chat_id": chat_id}
+                if caption:
+                    data["caption"] = caption
                 if reply_markup:
-                    data['reply_markup'] = reply_markup
+                    data["reply_markup"] = reply_markup
                 if parse_mode:
-                    data['parse_mode'] = parse_mode
-                with open(audio, 'rb') as a:
-                    return httpx.post(self.api_url+"sendAudio", data=data, files={"audio": a}).json()['result']
-            elif "https://" in audio or "http://" in audio:
-                json = {"chat_id": chat_id, "audio": audio, 'caption': caption, 'reply_markup': reply_markup}
+                    data["parse_mode"] = parse_mode
+                
+                with open(file_path, "rb") as f:
+                    response = httpx.post(
+                        self.api_url + method,
+                        data=data,
+                        files={file_param: f},
+                        timeout=60.0
+                    )
+                    return response.json().get("result", {})
+            elif file_path.startswith(("http://", "https://")):
+                json_data = {"chat_id": chat_id, file_param: file_path}
+                if caption:
+                    json_data["caption"] = caption
                 if reply_markup:
-                    json['reply_markup'] = reply_markup
+                    json_data["reply_markup"] = reply_markup
                 if parse_mode:
-                    json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"sendAudio", json=json).json()['result']
+                    json_data["parse_mode"] = parse_mode
+                
+                response = httpx.post(self.api_url + method, json=json_data, timeout=30.0)
+                return response.json().get("result", {})
+            
             else:
-                raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
-        except:
-            self.logger.error("Error occured: ", exc_info=True)
-    
-    def send_voice(self, chat_id, voice: str, caption, reply_markup: Union[dict, None] = None, parse_mode: str = None):
-        try:
-            if os.path.exists(voice):
-                data = {"chat_id": chat_id, 'caption': caption}
-                if reply_markup:
-                    data['reply_markup'] = reply_markup
-                if parse_mode:
-                    data['parse_mode'] = parse_mode
-                with open(voice, 'rb') as v:
-                    return httpx.post(self.api_url+"sendVoice", data=data, files={"voice": v}).json()['result']
-            else:
-                raise FileNotFoundError(f"file {voice} not found. Make sure it exists")
-        except:
-            self.logger.error("Error occured: ", exc_info=True)
-    
-    def send_sticker(self, chat_id, sticker: str, reply_markup: dict = None):
+                raise FileNotFoundOrInvalidURLError(
+                    f"File not found or invalid URL: {file_path}"
+                )
+        except Exception as e:
+            self.logger.error(f"Error in {method}: {e}", exc_info=True)
+            return {}
+
+    def send_photo(self, chat_id: int, photo: str, caption: Optional[str] = None, reply_markup: Optional[dict] = None, parse_mode: Optional[str] = None) -> dict:
+        return self._send_file("sendPhoto", chat_id, photo, "photo", caption, reply_markup, parse_mode)
+
+    def send_video(self, chat_id: int, video: str, caption: Optional[str] = None, reply_markup: Optional[dict] = None,parse_mode: Optional[str] = None) -> dict:
+        """Send a video"""
+        return self._send_file("sendVideo", chat_id, video, "video", caption, reply_markup, parse_mode)
+
+    def send_audio(self, chat_id: int, audio: str, caption: Optional[str] = None, reply_markup: Optional[dict] = None, parse_mode: Optional[str] = None) -> dict:
+        """Send an audio file"""
+        return self._send_file("sendAudio", chat_id, audio, "audio", caption, reply_markup, parse_mode)
+
+    def send_voice(self, chat_id: int, voice: str, caption: Optional[str] = None, reply_markup: Optional[dict] = None, parse_mode: Optional[str] = None ) -> dict:
+        """Send a voice message"""
+        if not os.path.exists(voice):
+            raise FileNotFoundError(f"File {voice} not found")
+        return self._send_file("sendVoice", chat_id, voice, "voice", caption, reply_markup, parse_mode)
+
+    def send_document(self, chat_id: int, document: str, caption: Optional[str] = None, parse_mode: Optional[str] = None, reply_markup: Optional[dict] = None) -> dict:
+        """Send a document"""
+        return self._send_file("sendDocument", chat_id, document, "document", caption, reply_markup, parse_mode)
+
+    def send_sticker(
+        self, 
+        chat_id: int, 
+        sticker: str, 
+        reply_markup: Optional[dict] = None
+    ) -> dict:
+        """Send a sticker"""
         params = {"chat_id": chat_id, "sticker": sticker}
         if reply_markup:
-            params['reply_markup'] = reply_markup
-        return httpx.post(self.api_url + "sendSticker", json=params).json()['result']
-    
-    def send_document(self, chat_id, document: str, caption: str = None, parse_mode: str = None, reply_markup: Union[dict, None] = None):
+            params["reply_markup"] = reply_markup
+        
         try:
-            if os.path.exists(document):
-                data = {"chat_id": chat_id, 'caption': caption}
-                if reply_markup:
-                    data['reply_markup'] = reply_markup
-                if parse_mode:
-                    data['parse_mode'] = parse_mode
-                with open(document, 'rb') as v:
-                    return httpx.post(self.api_url+"senddocument", data=data, files={"document": v}).json()['result']
-            elif "https://" in document or "http://" in document:
-                json = {"chat_id": chat_id, "document": document, 'caption': caption}
-                if reply_markup:
-                    json['reply_markup'] = reply_markup
-                if parse_mode:
-                    json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"senddocument", json=json).json()['result']
-            else:
-                raise FileNotFoundOrInvalidURLError(f"document not found or invalid URL: {document}")
-        except:
-            self.logger.error("Error occured: ", exc_info=True)
+            response = httpx.post(self.api_url + "sendSticker", json=params, timeout=30.0)
+            return response.json().get("result", {})
+        except Exception as e:
+            self.logger.error(f"Error sending sticker: {e}")
+            return {}
 
-    def edit_message_text(self, chat_id: int, message_id: int, text: str, parse_mode: str = None, reply_markup: Union[dict, None] = None):
-        params = {'chat_id': chat_id, 'message_id': message_id, 'text': text}
+    def edit_message_text(self, chat_id: int, message_id: int, text: str, parse_mode: Optional[str] = None, reply_markup: Optional[dict] = None) -> dict:
+        """Edit a message"""
+        params = {"chat_id": chat_id, "message_id": message_id, "text": text}
+        
         if parse_mode:
-            params['parse_mode'] = parse_mode
+            params["parse_mode"] = parse_mode
         if reply_markup:
-            params['reply_markup'] = reply_markup
-        return httpx.post(self.api_url + "editMessageText", json=params).json()['result']
-    
-    def formatter(self, text: str, message):
+            params["reply_markup"] = reply_markup
+        
         try:
+            response = httpx.post(self.api_url + "editMessageText", json=params, timeout=30.0)
+            return response.json().get("result", {})
+        except Exception as e:
+            self.logger.error(f"Error editing message: {e}")
+            return {}
+
+    def formatter(self, text: str, message: dict) -> str:
+        """Format text with message data"""
+        try:
+            user = message.get("from", message.get("chat", {}))
             return text.format(
-                    first_name=message['from']['first_name'],
-                    last_name=message['from']['last_name'],
-                    full_name=f"{message['from']['first_name']} {message['from']['last_name']}",
-                    message_text=message['text'],
-                    user_id=message['from']['id'],
-                    message_id=message['message_id']
-                )
-        except:
-            try:
-                return text.format(
-                        first_name=message['chat']['first_name'] if 'first_name' in message['chat'] else "",
-                        last_name=message['chat']['last_name'] if 'last_name' in message['chat'] else "",
-                        full_name=f"{message['chat']['first_name'] if 'first_name' in message['chat'] else ''} {message['chat']['last_name'] if 'last_name' in message['chat'] else ''}",
-                        message_text=message['text'],
-                        user_id=message['from']['id'],
-                        message_id=message['message_id']
-                    )
-            except:
-                return text
-    
-    def get_me(self):
-        return httpx.get(self.api_url + "getMe").json()
-    
-    def process_callback(self, callback):
-        message = callback.get("message", {})
-        data = callback.get('data')
-        chat_id = message['chat']['id']
-        handled = self.callback_handlers.get(data)
-        
-        if not handled:
-            return
-            
-        if callable(handled['text']):
-            returned = handled['text'](message)
-            if isinstance(returned, Photo):
-                self.send_photo(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(returned, Video):
-                self.send_video(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(returned, Audio):
-                self.send_audio(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(returned, Voice):
-                self.send_voice(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(returned, Sticker):
-                self.send_sticker(chat_id, returned.file_id, reply_markup=handled['reply_markup'])
-            elif isinstance(returned, str):
-                self.send_message(chat_id, self.formatter(returned, message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
-            elif isinstance(returned, Document):
-                self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-        
-        if isinstance(handled['text'], Photo):
-            self.send_photo(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-        elif isinstance(handled['text'], Video):
-            self.send_video(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-        elif isinstance(handled['text'], Audio):
-            self.send_audio(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-        elif isinstance(handled['text'], Voice):
-            self.send_voice(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-        elif isinstance(handled['text'], Sticker):
-            self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
-        elif isinstance(handled['text'], str):
-            self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
-        elif isinstance(returned, Document):
-            self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-    
-    def process_messages(self, message):
-        chat_id = message['from']['id']
+                first_name=user.get("first_name", ""),
+                last_name=user.get("last_name", ""),
+                full_name=f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+                message_text=message.get("text", ""),
+                user_id=user.get("id", ""),
+                message_id=message.get("message_id", "")
+            )
+        except (KeyError, AttributeError):
+            return text
 
-        if self.auto_db:
-            self.db.add_data("users", username=message['from']['username'], user_id=chat_id)
+    def get_me(self) -> dict:
+        """Get bot information"""
+        try:
+            response = httpx.get(self.api_url + "getMe", timeout=10.0)
+            return response.json()
+        except Exception as e:
+            self.logger.error(f"Error getting bot info: {e}")
+            return {}
 
-        if self.admin_id:
-            if message['from']['id'] == self.admin_id:
-                self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(['statistika📊']))
-                self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data("users"))}")
+    def _send_handler_response(self, chat_id: int, handler: dict, message: dict):
+        """Send response based on handler type"""
+        response = handler["text"]
         
-        if "text" in message:
-            text = message.get("text", "")
-            chat_id = message['chat']['id']
-            handled = self.handlers.get(text) or self.handlers.get("*")
-
-            if not handled:
+        # Call function if callable
+        if callable(response):
+            result = response(Message(**message)) if "text" in message else response()
+            if result:
                 return
-            
-            if callable(handled['text']):
-                returned = handled['text'](message)
-                if isinstance(returned, Photo):
-                    self.send_photo(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-                elif isinstance(returned, Video):
-                    self.send_video(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-                elif isinstance(returned, Audio):
-                    self.send_audio(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-                elif isinstance(returned, Voice):
-                    self.send_voice(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-                elif isinstance(returned, Sticker):
-                    self.send_sticker(chat_id, returned.file_id, reply_markup=handled['reply_markup'])
-                elif isinstance(returned, str):
-                    self.send_message(chat_id, self.formatter(returned, message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
-                elif isinstance(returned, Document):
-                    self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            
-            if isinstance(handled['text'], Photo):
-                self.send_photo(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(handled['text'], Video):
-                self.send_video(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(handled['text'], Audio):
-                self.send_audio(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(handled['text'], Voice):
-                self.send_voice(chat_id, self.formatter(handled['text'].url, message), caption=self.formatter(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
-            elif isinstance(handled['text'], Sticker):
-                self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
-            elif isinstance(handled['text'], str):
-                self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
-            elif isinstance(returned, Document):
-                self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
         
-        elif "photo" in message:
-            hv = self.handlers.get(Photo)
-            if callable(hv['text']):
-                hv['text'](message)
-            elif isinstance(hv['text'], str):
-                self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-        elif "video" in message:
-            hv = self.handlers.get(Video)
-            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-        elif "sticker" in message:
-            hv = self.handlers.get(Sticker)
-            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
-        elif "document" in message:
-            hv = self.handlers.get(Document)
-            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        # Send appropriate media type
+        if isinstance(response, Photo):
+            self.send_photo(
+                chat_id, 
+                self.formatter(response.url, message),
+                caption=self.formatter(response.caption, message),
+                reply_markup=handler["reply_markup"],
+                parse_mode=handler["parse_mode"]
+            )
+        elif isinstance(response, Video):
+            self.send_video(
+                chat_id,
+                self.formatter(response.url, message),
+                caption=self.formatter(response.caption, message),
+                reply_markup=handler["reply_markup"],
+                parse_mode=handler["parse_mode"]
+            )
+        elif isinstance(response, Audio):
+            self.send_audio(
+                chat_id,
+                self.formatter(response.url, message),
+                caption=self.formatter(response.caption, message),
+                reply_markup=handler["reply_markup"],
+                parse_mode=handler["parse_mode"]
+            )
+        elif isinstance(response, Voice):
+            self.send_voice(
+                chat_id,
+                self.formatter(response.url, message),
+                caption=self.formatter(response.caption, message),
+                reply_markup=handler["reply_markup"],
+                parse_mode=handler["parse_mode"]
+            )
+        elif isinstance(response, Sticker):
+            self.send_sticker(chat_id, response.file_id, reply_markup=handler["reply_markup"])
+        elif isinstance(response, Document):
+            self.send_document(
+                chat_id,
+                response.file_id,
+                caption=self.formatter(response.caption, message),
+                reply_markup=handler["reply_markup"],
+                parse_mode=handler["parse_mode"]
+            )
+        elif isinstance(response, str):
+            self.send_message(
+                chat_id,
+                self.formatter(response, message),
+                parse_mode=handler["parse_mode"],
+                reply_markup=handler["reply_markup"]
+            )
+
+    def process_callback(self, callback: dict):
+        """Process callback queries"""
+        message = callback.get("message", {})
+        data = callback.get("data")
+        chat_id = message.get("chat", {}).get("id")
+        
+        if not chat_id or not data:
+            return
+        
+        handler = self.callback_handlers.get(data)
+        if handler:
+            self._send_handler_response(chat_id, handler, message)
+
+    def process_messages(self, message: dict):
+        """Process incoming messages"""
+        text = message.get("text", "")
+        chat_id = message.get("chat", {}).get("id")
+        
+        if not chat_id:
+            return
+        
+        # Save user to database
+        if self.auto_db and "from" in message:
+            self.db.add_data(
+                "users",
+                username=message["from"].get("username", ""),
+                user_id=message["from"].get("id")
+            )
+        
+        if self.admin_id and message.get("from", {}).get("id") == self.admin_id:
+            self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(["statistika📊"]))
+            self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data('users'))}")
+        
+        # Get handler
+        handler = self.handlers.get(text) or self.handlers.get("*")
+        
+        if handler:
+            self._send_handler_response(chat_id, handler, message)
 
     def run(self):
-        getme = self.get_me()
-        try:
-            self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
-        except:
-            raise Exception(f"No telegram bot found based on the token")
+        """Start the bot"""
+        bot_info = self.get_me()
+        
+        if not bot_info.get("result"):
+            raise Exception("No telegram bot found with the provided token")
+        
+        bot_data = bot_info["result"]
+        self.logger.info(f"[@{bot_data['username']} - id={bot_data['id']}] successfully started")
         offset = 0
         while True:
             try:
-                for update in self.get_updates(offset).get("result", []):
-                    offset = update['update_id'] + 1
+                updates = self.get_updates(offset)
                 
+                for update in updates.get("result", []):
+                    offset = update["update_id"] + 1
+                    
                     if "callback_query" in update:
-                        self.process_callback(update['callback_query'])
+                        self.process_callback(update["callback_query"])
                     elif "message" in update:
-                        self.process_messages(update['message'])
+                        self.process_messages(update["message"])
+                        
+            except KeyboardInterrupt:
+                self.logger.info("Bot stopped by user")
+                break
             except Exception as e:
-                self.logger.error("Error occured", exc_info=True)
+                self.logger.error("Error occurred", exc_info=True)
