@@ -13,6 +13,6 @@ setup(
         ],
     },
     author="Sino Farmonov",
-    description="Simple Telegram bot framework with built-in admin panel and ORM",
+    description="Simple Telegram bot framework with some built-in features.",
     python_requires=">=3.8",
 )
