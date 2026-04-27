@@ -1,13 +1,18 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='osonbot',
-    version='1.6.0',
-    description='A simple and extensible chatbot framework.',
-    author='Your Name',
+    name="osonbot",
+    version="1.2.1",
     packages=find_packages(),
     install_requires=[
-        'httpx', 'watchdog'
+        'httpx', 'watchdog', 'pydantic'
     ],
-    website='https://github.com/sinofarmonov323/osonbot'
+    entry_points={
+        "console_scripts": [
+            "osonbot=osonbot.cli:main",
+        ],
+    },
+    author="Sino Farmonov",
+    description="Simple Telegram bot framework with built-in admin panel and ORM",
+    python_requires=">=3.8",
 )
