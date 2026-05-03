@@ -28,7 +28,7 @@ class Database:
             cur.execute(f"PRAGMA table_info({table_name});")
             return {row[1] for row in cur.fetchall()}  # row[1] is column name
 
-    def create_default_table(self, table_name: str, **columns: type):
+    def create_table(self, table_name: str, **columns: type):
         """
         Create the table if not exists. If it exists, add any missing columns.
         Passing columns overwrites defaults (i.e. you supply exact columns you want).
@@ -65,7 +65,7 @@ class Database:
                     with sqlite3.connect(self.db_name) as conn:
                         conn.execute(alter_sql)
     
-    def overwrite_table(self, table_name: str, **columns: type):
+    def overwrite_default_table(self, table_name: str, **columns: type):
         """
         Drops the table (if exists) and creates it with the given columns.
         WARNING: This destroys existing data in that table.
@@ -82,7 +82,7 @@ class Database:
             conn.execute(drop_sql)
             conn.execute(create_sql)
         self._table_name = table_name
-
+    
     def add_data(self, table_name, **data):
         if not data:
             raise ValueError("You must provide at least one column and value.")
@@ -139,3 +139,10 @@ class Database:
                     alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {name} {col_type};"
                     with sqlite3.connect(self.db_name) as conn:
                         conn.execute(alter_sql)
+    
+    def get_user(self, user_id: int):
+        with sqlite3.connect(self.db_name) as con:
+            con.row_factory = sqlite3.Row
+            cursor = con.cursor()
+            cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+            return dict(cursor.fetchone())

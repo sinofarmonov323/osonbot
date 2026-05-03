@@ -1,13 +1,13 @@
 import os
 import httpx
-from typing import Union, Callable, Optional
+from typing import Union
 from .database import Database
 from .utils import (
     FileNotFoundOrInvalidURLError, 
     Photo, Video, Audio, Voice, Document, Sticker,
     setup_logger, 
     InlineKeyboardButton, RemoveKeyboardButton, URLKeyboardButton, KeyboardButton,
-    Message
+    Message, StateManager
 )
 
 
@@ -22,7 +22,8 @@ class Bot:
         if auto_db:
             db = Database(db_name)
             self.db = db
-            self.db.create_default_table("users", username=str, user_id=int)
+            self.db.create_table("users", username=str, user_id=int)
+        self.state = StateManager()
 
     def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         if condition:
@@ -176,7 +177,8 @@ class Bot:
                     full_name=f"{message['from']['first_name']} {message['from']['last_name']}",
                     message_text=message['text'],
                     user_id=message['from']['id'],
-                    message_id=message['message_id']
+                    message_id=message['message_id'],
+                    message=message
                 )
         except:
             try:
@@ -214,7 +216,7 @@ class Bot:
         if self.admin_id:
             if message['from']['id'] == self.admin_id:
                 self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(['statistika📊']))
-                self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data())}")
+                self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data("users"))}")
 
         if "text" in message:
             text = message.get("text", "")
@@ -225,7 +227,7 @@ class Bot:
                 return
             
             if callable(handled['text']):
-                returned = handled['text'](message)
+                returned = handled['text'](Message(**message))
                 if isinstance(returned, Photo):
                     self.send_photo(chat_id, returned.url, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
                 elif isinstance(returned, Video):
@@ -253,7 +255,7 @@ class Bot:
                 self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
             elif isinstance(handled['text'], str):
                 self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
-            elif isinstance(returned, Document):
+            elif isinstance(handled['text'], Document):
                 self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
         
         elif "photo" in message:

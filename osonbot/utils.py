@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -101,4 +102,14 @@ class Message(BaseModel):
     chat: Chat
     date: int
     text: str
-    entities: list
+    entities: Optional[list] = None
+
+class StateManager:
+    def __init__(self):
+        self._state = {}
+
+    def set(self, user_id: int, state):
+        self._state[user_id] = state
+    
+    def get(self, user_id: int):
+        return self._state.get(user_id)
