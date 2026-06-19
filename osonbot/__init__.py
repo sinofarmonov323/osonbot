@@ -1,7 +1,7 @@
 from .bot import Bot
 from .utils import (
     KeyboardButton, InlineKeyboardButton, URLKeyboardButton, RemoveKeyboardButton, Photo, Video, Audio, Voice, Sticker,
-    Document, Message
+    Document, Message, State
 )
 
 __all__ = [
@@ -9,5 +9,5 @@ __all__ = [
     "Photo", "Video", "Audio", "Voice", "Sticker", "Document",
     "KeyboardButton", "RemoveKeyboardButton", "InlineKeyboardButton", "URLKeyboardButton",
     "Message",
-    "botbuilder"
+    "State"
 ]

@@ -7,31 +7,41 @@ from .utils import (
     Photo, Video, Audio, Voice, Document, Sticker,
     setup_logger, 
     InlineKeyboardButton, RemoveKeyboardButton, URLKeyboardButton, KeyboardButton,
-    Message, StateManager
+    Message, State
 )
-
 
 class Bot:
     def __init__(self, token, auto_db: bool = True, db_name: str = "database.db", admin_id: int = None):
         self.api_url = f"https://api.telegram.org/bot{token}/"
+        self.client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0), transport=httpx.HTTPTransport(retries=3))
         self.handlers = {}
         self.callback_handlers = {}
         self.logger = setup_logger("osonbot")
         self.auto_db = auto_db
         self.admin_id = admin_id
         if auto_db:
-            db = Database(db_name)
-            self.db = db
+            self.db = Database(db_name)
             self.db.create_table("users", username=str, user_id=int)
-        self.state = StateManager()
+        # self.state = State()
 
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+    def send_request(self, method: str, request: str, params: dict = None, data: dict = None, json: dict = None):
+        try:
+            if method == "post":
+                return self.client.post(self.api_url + request, params=params, data=data, json=json)
+            elif method == "get":
+                return self.client.get(self.api_url + request, params=params)
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+            return e
+
+    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, state: str = None):
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
                     self.handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
             else:
                 self.handlers[condition] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+        return self
 
     def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
         if condition:
@@ -40,9 +50,10 @@ class Bot:
                     self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
             else:
                 self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+        return self
 
     def get_updates(self, offset: int):
-        return httpx.get(self.api_url+"getUpdates", params={'offset': offset}).json()
+        return self.client.get(self.api_url+"getUpdates", params={'offset': offset}).json()
     
     def send_message(self, chat_id, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         params = {'chat_id': chat_id, "text": text}
@@ -50,7 +61,7 @@ class Bot:
             params['parse_mode'] = parse_mode
         if reply_markup:
             params['reply_markup'] = reply_markup
-        return httpx.post(self.api_url+"sendMessage", json=params).json()['result']
+        return self.client.post(self.api_url+"sendMessage", json=params).json()['result']
     
     def send_photo(self, chat_id, photo: str, caption: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
         try:
@@ -61,17 +72,17 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(photo, 'rb') as p:
-                    return httpx.post(self.api_url+"sendPhoto", data=data, files={"photo": p}).json()
+                    return self.client.post(self.api_url+"sendPhoto", data=data, files={"photo": p}).json()
             elif "https://" in photo or "http://" in photo:
                 json = {"chat_id": chat_id, "photo": photo, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"sendPhoto", json=json).json()
+                return self.client.post(self.api_url+"sendPhoto", json=json).json()
             else:
                 raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
-        except:
+        except Exception as e:
             self.logger.error("Error occured: ", exc_info=True)
 
     def send_video(self, chat_id, video: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
@@ -83,17 +94,17 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(video, 'rb') as v:
-                    return httpx.post(self.api_url+"sendVideo", data=data, files={"video": v}).json()['result']
+                    return self.client.post(self.api_url+"sendVideo", data=data, files={"video": v}).json()['result']
             elif "https://" in video or "http://" in video:
                 json = {"chat_id": chat_id, "video": video, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"sendVideo", json=json).json()['result']
+                return self.client.post(self.api_url+"sendVideo", json=json).json()['result']
             else:
                 raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
-        except:
+        except Exception as e:
             self.logger.error("Error occured: ", exc_info=True)
 
     def send_audio(self, chat_id, audio: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
@@ -105,17 +116,17 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(audio, 'rb') as a:
-                    return httpx.post(self.api_url+"sendAudio", data=data, files={"audio": a}).json()['result']
+                    return self.client.post(self.api_url+"sendAudio", data=data, files={"audio": a}).json()['result']
             elif "https://" in audio or "http://" in audio:
                 json = {"chat_id": chat_id, "audio": audio, 'caption': caption, 'reply_markup': reply_markup}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"sendAudio", json=json).json()['result']
+                return self.client.post(self.api_url+"sendAudio", json=json).json()['result']
             else:
                 raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
-        except:
+        except Exception as e:
             self.logger.error("Error occured: ", exc_info=True)
     
     def send_voice(self, chat_id, voice: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
@@ -127,17 +138,17 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(voice, 'rb') as v:
-                    return httpx.post(self.api_url+"sendVoice", data=data, files={"voice": v}).json()['result']
+                    return self.client.post(self.api_url+"sendVoice", data=data, files={"voice": v}).json()['result']
             else:
                 raise FileNotFoundError(f"file {voice} not found. Make sure it exists")
-        except:
+        except Exception as e:
             self.logger.error("Error occured: ", exc_info=True)
     
     def send_sticker(self, chat_id, sticker: str, reply_markup: dict = None):
         params = {"chat_id": chat_id, "sticker": sticker}
         if reply_markup:
             params['reply_markup'] = reply_markup
-        return httpx.post(self.api_url + "sendSticker", json=params).json()['result']
+        return self.client.post(self.api_url + "sendSticker", json=params).json()['result']
     
     def send_document(self, chat_id, document: str, caption: str = None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
         try:
@@ -148,17 +159,17 @@ class Bot:
                 if parse_mode:
                     data['parse_mode'] = parse_mode
                 with open(document, 'rb') as v:
-                    return httpx.post(self.api_url+"senddocument", data=data, files={"document": v}).json()['result']
+                    return self.client.post(self.api_url+"sendDocument", data=data, files={"document": v}).json()['result']
             elif "https://" in document or "http://" in document:
                 json = {"chat_id": chat_id, "document": document, 'caption': caption}
                 if reply_markup:
                     json['reply_markup'] = reply_markup
                 if parse_mode:
                     json['parse_mode'] = parse_mode
-                return httpx.post(self.api_url+"senddocument", json=json).json()['result']
+                return self.client.post(self.api_url+"sendDocument", json=json).json()['result']
             else:
                 raise FileNotFoundOrInvalidURLError(f"document not found or invalid URL: {document}")
-        except:
+        except Exception as e:
             self.logger.error("Error occured: ", exc_info=True)
 
     def edit_message_text(self, chat_id: int, message_id: int, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
@@ -167,7 +178,7 @@ class Bot:
             params['parse_mode'] = parse_mode
         if reply_markup:
             params['reply_markup'] = reply_markup
-        return httpx.post(self.api_url + "editMessageText", json=params).json()['result']
+        return self.client.post(self.api_url + "editMessageText", json=params).json()['result']
     
     def formatter(self, text: str, message):
         try:
@@ -178,9 +189,10 @@ class Bot:
                     message_text=message['text'],
                     user_id=message['from']['id'],
                     message_id=message['message_id'],
-                    message=message
+                    msg=message
                 )
-        except:
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
             try:
                 return text.format(
                         first_name=message['chat']['first_name'] if 'first_name' in message['chat'] else "",
@@ -188,13 +200,15 @@ class Bot:
                         full_name=f"{message['chat']['first_name'] if 'first_name' in message['chat'] else ''} {message['chat']['last_name'] if 'last_name' in message['chat'] else ''}",
                         message_text=message['text'],
                         user_id=message['from']['id'],
-                        message_id=message['message_id']
+                        message_id=message['message_id'],
+                        msg=message
                     )
-            except:
+            except Exception as e:
+                self.logger.error("Error occured: ", exc_info=True)
                 return text
     
     def get_me(self):
-        return httpx.get(self.api_url + "getMe").json()
+        return self.client.get(self.api_url + "getMe").json()
 
     def process_callback(self, callback):
         message = callback.get("message", {})
@@ -211,18 +225,19 @@ class Bot:
         chat_id = message['from']['id']
 
         if self.auto_db:
-            self.db.add_data("users", username=message['from']['username'], user_id=chat_id)
+            self.db.add_data("users", username=message['from'].get("username"), user_id=chat_id)
 
         if self.admin_id:
             if message['from']['id'] == self.admin_id:
                 self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(['statistika📊']))
                 self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data("users"))}")
-
+        
         if "text" in message:
             text = message.get("text", "")
             chat_id = message['chat']['id']
-            handled = self.handlers.get(text) or self.handlers.get("*")
 
+            handled = self.handlers.get(text, "*")
+            
             if not handled:
                 return
             
@@ -257,6 +272,8 @@ class Bot:
                 self.send_message(chat_id, self.formatter(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
             elif isinstance(handled['text'], Document):
                 self.send_document(chat_id, returned.file_id, caption=self.formatter(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            else:
+                pass
         
         elif "photo" in message:
             hv = self.handlers.get(Photo)
@@ -275,7 +292,8 @@ class Bot:
         getme = self.get_me()
         try:
             self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
-        except:
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
             raise Exception(f"No telegram bot found based on the token")
         offset = 0
         while True:
@@ -289,4 +307,4 @@ class Bot:
                         self.process_messages(update['message'])
                     
             except Exception as e:
-                self.logger.error("Error occured", exc_info=True)
+                self.logger.error("Error occured: ", exc_info=True)

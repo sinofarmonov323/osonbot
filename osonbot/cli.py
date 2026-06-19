@@ -56,7 +56,7 @@ def watcher(file: str):
             event_handler.process.wait()
     
     observer.join()
-    print("Watcher stopped")
+    print("stopped")
 
 def main():
     parser = argparse.ArgumentParser(

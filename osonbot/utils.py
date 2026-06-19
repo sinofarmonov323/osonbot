@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Any
 from pydantic import BaseModel, Field
 
 
@@ -55,14 +55,14 @@ class Voice:
         self.url = url
         self.caption = caption
 
+class Document:
+    def __init__(self, file_id, caption=""):
+        self.file_id = file_id
+        self.caption = caption
+
 class Sticker:
     def __init__(self, file_id):
         self.file_id = file_id
-
-class Document:
-    def __init__(self, file_id):
-        self.file_id = file_id
-
 
 def setup_logger(name: str):
     logger = logging.getLogger(name)
@@ -104,12 +104,22 @@ class Message(BaseModel):
     text: str
     entities: Optional[list] = None
 
-class StateManager:
-    def __init__(self):
-        self._state = {}
+class State:
+    handlers = {}
+    user_state = {}
 
-    def set(self, user_id: int, state):
-        self._state[user_id] = state
+    def __init__(self, state: str = None, **kwargs):
+        if kwargs and state:
+            State.handlers[state] = kwargs
+        return State.handlers
     
-    def get(self, user_id: int):
-        return self._state.get(user_id)
+    def add_state(self, state, **kwargs):
+        self.handlers[state] = kwargs
+        return self
+    
+    # def get(self, user_id):
+    #     current_state = self.handlers.get(user_id)
+    #     if not current_state:
+    #         return None
+    #     state_data = current_state.split(":")
+    #     return self.handlers.get(state_data[0], {}).get(state_data[1])
