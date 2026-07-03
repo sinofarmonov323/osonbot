@@ -182,10 +182,12 @@ class Bot:
     
     def formatter(self, text: str, message):
         try:
+            first_name = message['from'].get('first_name', "")
+            last_name = message['from'].get('last_name', "")
             return text.format(
-                    first_name=message['from']['first_name'],
-                    last_name=message['from']['last_name'],
-                    full_name=f"{message['from']['first_name']} {message['from']['last_name']}",
+                    first_name=first_name,
+                    last_name=last_name,
+                    full_name=f"{first_name} {last_name}".strip(),
                     message_text=message['text'],
                     user_id=message['from']['id'],
                     message_id=message['message_id'],
@@ -236,7 +238,7 @@ class Bot:
             text = message.get("text", "")
             chat_id = message['chat']['id']
 
-            handled = self.handlers.get(text, "*")
+            handled = self.handlers.get(text) or self.handlers.get("*")
             
             if not handled:
                 return

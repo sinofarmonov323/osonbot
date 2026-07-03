@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="osonbot",
-    version="1.2.4",
+    version="1.2.5",
     packages=find_packages(),
     install_requires=[
         'httpx', 'watchdog', 'pydantic'

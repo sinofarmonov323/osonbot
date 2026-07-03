@@ -81,8 +81,8 @@ class User(BaseModel):
     id: int
     is_bot: bool
     first_name: str
-    surename: str | None = None 
     language_code: str
+    username: str | None = None
     last_name: str | None = None
 
     @property
