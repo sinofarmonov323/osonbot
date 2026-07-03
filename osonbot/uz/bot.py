@@ -1,0 +1,312 @@
+import os
+import httpx
+from typing import Union
+from ..database import Database
+from ..utils import (
+    FileNotFoundOrInvalidURLError, 
+    Photo, Video, Audio, Voice, Document, Sticker,
+    setup_logger, 
+    InlineKeyboardButton, RemoveKeyboardButton, URLKeyboardButton, KeyboardButton,
+    Message, State
+)
+
+class Bot:
+    def __init__(self, token, auto_db: bool = True, db_name: str = "database.db", admin_id: int = None):
+        self.api_url = f"https://api.telegram.org/bot{token}/"
+        self.client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0), transport=httpx.HTTPTransport(retries=3))
+        self.handlers = {}
+        self.callback_handlers = {}
+        self.logger = setup_logger("osonbot")
+        self.auto_db = auto_db
+        self.admin_id = admin_id
+        if auto_db:
+            self.db = Database(db_name)
+            self.db.create_table("users", username=str, user_id=int)
+        # self.state = State()
+
+    def sorov_jonatish(self, method: str, request: str, params: dict = None, data: dict = None, json: dict = None):
+        try:
+            if method == "post":
+                return self.client.post(self.api_url + request, params=params, data=data, json=json)
+            elif method == "get":
+                return self.client.get(self.api_url + request, params=params)
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+            return e
+
+    def ushla(self, holatda: str | list[str], text: str, pars_mod: str = None, tugmalar: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, state: str = None):
+        if holatda:
+            if isinstance(holatda, list):
+                for cond in holatda:
+                    self.handlers[cond] = {"text": text, 'parse_mode': pars_mod, 'reply_markup': tugmalar}
+            else:
+                self.handlers[holatda] = {"text": text, 'parse_mode': pars_mod, 'reply_markup': tugmalar}
+        return self
+
+    def callbackni_ushla(self, holatda: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
+        if holatda:
+            if isinstance(holatda, list):
+                for cond in holatda:
+                    self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
+            else:
+                self.callback_handlers[holatda] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+        return self
+
+    def yangiliklarni_olish(self, offset: int):
+        return self.client.get(self.api_url+"getUpdates", params={'offset': offset}).json()
+    
+    def xabar_jonatish(self, chat_id, text: str, pars_mod: str = None, tugmalar: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+        params = {'chat_id': chat_id, "text": text}
+        if pars_mod:
+            params['parse_mode'] = pars_mod
+        if tugmalar:
+            params['reply_markup'] = tugmalar
+        return self.client.post(self.api_url+"sendMessage", json=params).json()['result']
+    
+    def rasm_jonatish(self, chat_id, photo: str, caption: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+        try:
+            if os.path.exists(photo):
+                data = {"chat_id": chat_id, 'caption': caption}
+                if reply_markup:
+                    data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
+                with open(photo, 'rb') as p:
+                    return self.client.post(self.api_url+"sendPhoto", data=data, files={"photo": p}).json()
+            elif "https://" in photo or "http://" in photo:
+                json = {"chat_id": chat_id, "photo": photo, 'caption': caption}
+                if reply_markup:
+                    json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
+                return self.client.post(self.api_url+"sendPhoto", json=json).json()
+            else:
+                raise FileNotFoundOrInvalidURLError(f"Photo not found or invalid URL: {photo}")
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+
+    def video_jonatish(self, chat_id, video: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+        try:
+            if os.path.exists(video):
+                data = {"chat_id": chat_id, 'caption': caption}
+                if reply_markup:
+                    data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
+                with open(video, 'rb') as v:
+                    return self.client.post(self.api_url+"sendVideo", data=data, files={"video": v}).json()['result']
+            elif "https://" in video or "http://" in video:
+                json = {"chat_id": chat_id, "video": video, 'caption': caption}
+                if reply_markup:
+                    json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
+                return self.client.post(self.api_url+"sendVideo", json=json).json()['result']
+            else:
+                raise FileNotFoundOrInvalidURLError(f"Video not found or invalid URL: {video}")
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+
+    def audio_jonatish(self, chat_id, audio: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+        try:
+            if os.path.exists(audio):
+                data = {"chat_id": chat_id, 'caption': caption}
+                if reply_markup:
+                    data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
+                with open(audio, 'rb') as a:
+                    return self.client.post(self.api_url+"sendAudio", data=data, files={"audio": a}).json()['result']
+            elif "https://" in audio or "http://" in audio:
+                json = {"chat_id": chat_id, "audio": audio, 'caption': caption, 'reply_markup': reply_markup}
+                if reply_markup:
+                    json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
+                return self.client.post(self.api_url+"sendAudio", json=json).json()['result']
+            else:
+                raise FileNotFoundOrInvalidURLError(f"Audio not found or invalid URL: {audio}")
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+
+    def voice_jonatish(self, chat_id, voice: str, caption, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, parse_mode: str = None):
+        try:
+            if os.path.exists(voice):
+                data = {"chat_id": chat_id, 'caption': caption}
+                if reply_markup:
+                    data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
+                with open(voice, 'rb') as v:
+                    return self.client.post(self.api_url+"sendVoice", data=data, files={"voice": v}).json()['result']
+            else:
+                raise FileNotFoundError(f"file {voice} not found. Make sure it exists")
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+    
+    def sticker_jonatish(self, chat_id, sticker: str, reply_markup: dict = None):
+        params = {"chat_id": chat_id, "sticker": sticker}
+        if reply_markup:
+            params['reply_markup'] = reply_markup
+        return self.client.post(self.api_url + "sendSticker", json=params).json()['result']
+    
+    def dokument_jonatish(self, chat_id, document: str, caption: str = None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+        try:
+            if os.path.exists(document):
+                data = {"chat_id": chat_id, 'caption': caption}
+                if reply_markup:
+                    data['reply_markup'] = reply_markup
+                if parse_mode:
+                    data['parse_mode'] = parse_mode
+                with open(document, 'rb') as v:
+                    return self.client.post(self.api_url+"sendDocument", data=data, files={"document": v}).json()['result']
+            elif "https://" in document or "http://" in document:
+                json = {"chat_id": chat_id, "document": document, 'caption': caption}
+                if reply_markup:
+                    json['reply_markup'] = reply_markup
+                if parse_mode:
+                    json['parse_mode'] = parse_mode
+                return self.client.post(self.api_url+"sendDocument", json=json).json()['result']
+            else:
+                raise FileNotFoundOrInvalidURLError(f"document not found or invalid URL: {document}")
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+
+    def habar_matnini_tahrirlash(self, chat_id: int, message_id: int, text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None):
+        params = {'chat_id': chat_id, 'message_id': message_id, 'text': text}
+        if parse_mode:
+            params['parse_mode'] = parse_mode
+        if reply_markup:
+            params['reply_markup'] = reply_markup
+        return self.client.post(self.api_url + "editMessageText", json=params).json()['result']
+    
+    def formatlovchi(self, text: str, message):
+        try:
+            first_name = message['from'].get('first_name', "")
+            last_name = message['from'].get('last_name', "")
+            return text.format(
+                    first_name=first_name,
+                    last_name=last_name,
+                    full_name=f"{first_name} {last_name}".strip(),
+                    message_text=message['text'],
+                    user_id=message['from']['id'],
+                    message_id=message['message_id'],
+                    msg=message
+                )
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+            try:
+                return text.format(
+                        first_name=message['chat']['first_name'] if 'first_name' in message['chat'] else "",
+                        last_name=message['chat']['last_name'] if 'last_name' in message['chat'] else "",
+                        full_name=f"{message['chat']['first_name'] if 'first_name' in message['chat'] else ''} {message['chat']['last_name'] if 'last_name' in message['chat'] else ''}",
+                        message_text=message['text'],
+                        user_id=message['from']['id'],
+                        message_id=message['message_id'],
+                        msg=message
+                    )
+            except Exception as e:
+                self.logger.error("Error occured: ", exc_info=True)
+                return text
+    
+    def get_me(self):
+        return self.client.get(self.api_url + "getMe").json()
+
+    def process_callback(self, callback):
+        message = callback.get("message", {})
+        data = callback.get('data')
+        chat_id = message['chat']['id']
+        handled = self.callback_handlers.get(data)
+        
+        if not handled:
+            return
+
+        self.send_message(chat_id, self.formatlovchi(handled['text'], message))
+    
+    def process_messages(self, message):
+        chat_id = message['from']['id']
+
+        if self.auto_db:
+            self.db.add_data("users", username=message['from'].get("username"), user_id=chat_id)
+
+        if self.admin_id:
+            if message['from']['id'] == self.admin_id:
+                self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(['statistika📊']))
+                self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data("users"))}")
+        
+        if "text" in message:
+            text = message.get("text", "")
+            chat_id = message['chat']['id']
+
+            handled = self.handlers.get(text) or self.handlers.get("*")
+            
+            if not handled:
+                return
+            
+            if callable(handled['text']):
+                returned = handled['text'](Message(**message))
+                if isinstance(returned, Photo):
+                    self.send_photo(chat_id, returned.url, caption=self.formatlovchi(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Video):
+                    self.send_video(chat_id, returned.url, caption=self.formatlovchi(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Audio):
+                    self.send_audio(chat_id, returned.url, caption=self.formatlovchi(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Voice):
+                    self.send_voice(chat_id, returned.url, caption=self.formatlovchi(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+                elif isinstance(returned, Sticker):
+                    self.send_sticker(chat_id, returned.file_id, reply_markup=handled['reply_markup'])
+                elif isinstance(returned, str):
+                    self.send_message(chat_id, self.formatlovchi(returned, message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+                elif isinstance(returned, Document):
+                    self.send_document(chat_id, returned.file_id, caption=self.formatlovchi(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            
+            if isinstance(handled['text'], Photo):
+                self.send_photo(chat_id, self.formatlovchi(handled['text'].url, message), caption=self.formatlovchi(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(handled['text'], Video):
+                self.send_video(chat_id, self.formatlovchi(handled['text'].url, message), caption=self.formatlovchi(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(handled['text'], Audio):
+                self.send_audio(chat_id, self.formatlovchi(handled['text'].url, message), caption=self.formatlovchi(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(handled['text'], Voice):
+                self.send_voice(chat_id, self.formatlovchi(handled['text'].url, message), caption=self.formatlovchi(handled['text'].caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            elif isinstance(handled['text'], Sticker):
+                self.send_sticker(chat_id, handled['text'].file_id, reply_markup=handled['reply_markup'])
+            elif isinstance(handled['text'], str):
+                self.send_message(chat_id, self.formatlovchi(handled['text'], message), parse_mode=handled['parse_mode'], reply_markup=handled['reply_markup'])
+            elif isinstance(handled['text'], Document):
+                self.send_document(chat_id, returned.file_id, caption=self.formatlovchi(returned.caption, message), reply_markup=handled['reply_markup'], parse_mode=handled['parse_mode'])
+            else:
+                pass
+        
+        elif "photo" in message:
+            hv = self.handlers.get(Photo)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        elif "video" in message:
+            hv = self.handlers.get(Video)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        elif "sticker" in message:
+            hv = self.handlers.get(Sticker)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+        elif "document" in message:
+            hv = self.handlers.get(Document)
+            self.send_message(chat_id, hv['text'], parse_mode=hv['parse_mode'], reply_markup=hv['reply_markup'])
+    
+    def run(self):
+        getme = self.get_me()
+        try:
+            self.logger.info(f"[@{getme['result']['username']} - id={getme['result']['id']}] successfully started")
+        except Exception as e:
+            self.logger.error("Error occured: ", exc_info=True)
+            raise Exception(f"No telegram bot found based on the token")
+        offset = 0
+        while True:
+            try:
+                for update in self.get_updates(offset).get("result", []):
+                    offset = update['update_id'] + 1
+
+                    if "callback_query" in update:
+                        self.process_callback(update['callback_query'])
+                    elif "message" in update:
+                        self.process_messages(update['message'])
+                    
+            except Exception as e:
+                self.logger.error("Error occured: ", exc_info=True)
