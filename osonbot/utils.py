@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 
@@ -85,21 +85,28 @@ class StateAmbiguousError(StateError):
     """Raised when a bare state name exists in multiple groups."""
     pass
 
-def KeyboardButton(*rows: list[str], resize_keyboard: bool = True, one_time_keyborad: bool = False):
+def KeyboardButton(
+    *rows: List[str],
+    resize_keyboard: bool = True,
+    one_time_keyborad: bool = False,
+    one_time_keyboard: Optional[bool] = None,
+):
+    if one_time_keyboard is not None:
+        one_time_keyborad = one_time_keyboard
     return {
         "keyboard": list(rows),
         'resize_keyboard': resize_keyboard,
         'one_time_keyboard': one_time_keyborad
     }
 
-def InlineKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
+def InlineKeyboardButton(*rows: List[List[Tuple[str, str]]]) -> Dict[str, list]:
     keyboard = []
     for row in rows:
         keyboard_row = [{"text": text, "callback_data": data} for text, data in row]
         keyboard.append(keyboard_row)
     return {"inline_keyboard": keyboard}
 
-def URLKeyboardButton(*rows: list[list[str, str]]) -> dict[str, list]:
+def URLKeyboardButton(*rows: List[List[Tuple[str, str]]]) -> Dict[str, list]:
     keyboard = []
     for row in rows:
         keyboard_row = [{"text": text, "url": data} for text, data in row]
@@ -146,12 +153,15 @@ def setup_logger(name: str):
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s", "%Y-%m-%d %H:%M:%S")
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-
-    logger.addHandler(stream_handler)
+    if not any(getattr(handler, "_osonbot_handler", False) for handler in logger.handlers):
+        formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+            "%Y-%m-%d %H:%M:%S",
+        )
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        stream_handler._osonbot_handler = True
+        logger.addHandler(stream_handler)
 
     return logger
 
@@ -159,9 +169,9 @@ class User(BaseModel):
     id: int
     is_bot: bool
     first_name: str
-    language_code: str | None = None
-    username: str | None = None
-    last_name: str | None = None
+    language_code: Optional[str] = None
+    username: Optional[str] = None
+    last_name: Optional[str] = None
 
     @property
     def full_name(self) -> str:
@@ -169,9 +179,9 @@ class User(BaseModel):
 
 class Chat(BaseModel):
     id: int
-    first_name: str | None = None
-    last_name: str | None = None
-    username: str | None = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
     type: str
 
 class Message(BaseModel):
@@ -179,11 +189,14 @@ class Message(BaseModel):
     from_user: User = Field(..., alias="from")
     chat: Chat
     date: int
-    text: str | None = None
-    entities: Optional[list] = None
+    text: Optional[str] = None
+    entities: Optional[List[Any]] = None
+
+    class Config:
+        allow_population_by_field_name = True
 
 class State:
-    def __init__(self, group: str = None, **states):
+    def __init__(self, group: Optional[str] = None, **states):
         self.handlers = {}
         self.user_state = {}
         self.user_data = {}
@@ -221,14 +234,14 @@ class State:
     def get_group(self, state: str) -> str:
         return self.resolve(state)[0]
 
-    def key(self, group: str, state: str = None) -> str:
+    def key(self, group: str, state: Optional[str] = None) -> str:
         if state is None:
             group, state = self.resolve(group)
         elif group not in self.handlers or state not in self.handlers[group]:
             raise StateNotFoundError(f"State not found: {group}:{state}")
         return f"state:{group}:{state}"
 
-    def resolve(self, state: str) -> tuple[str, str]:
+    def resolve(self, state: str) -> Tuple[str, str]:
         if not state or not isinstance(state, str):
             raise StateDefinitionError("State reference must be a non-empty string.")
 
@@ -261,7 +274,7 @@ class State:
         self.user_data.setdefault(user_id, {}).setdefault(group, self.handlers[group].copy())
         return self
 
-    def save(self, user_id: int, value: Any, state: str | None = None):
+    def save(self, user_id: int, value: Any, state: Optional[str] = None):
         current = self.get(user_id)
         if not current and state is None:
             raise StateNotFoundError(f"No active state for user: {user_id}")
@@ -281,7 +294,7 @@ class State:
     def get(self, user_id: int):
         return self.user_state.get(user_id)
 
-    def data(self, user_id: int, group: str | None = None):
+    def data(self, user_id: int, group: Optional[str] = None):
         if group is not None and group not in self.handlers:
             raise StateGroupNotFoundError(f"State group not found: {group}")
         data = self.user_data.get(user_id, {})
@@ -291,7 +304,7 @@ class State:
         self.user_state.pop(user_id, None)
         return self
 
-    def reset(self, user_id: int, group: str | None = None):
+    def reset(self, user_id: int, group: Optional[str] = None):
         if group is not None and group not in self.handlers:
             raise StateGroupNotFoundError(f"State group not found: {group}")
         if group is None:
