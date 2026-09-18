@@ -1,8 +1,16 @@
+from pathlib import Path
+
 from setuptools import setup, find_packages
+
+
+README_PATH = Path(__file__).with_name("README.md")
+README_BYTES = README_PATH.read_bytes()
+README_ENCODING = "utf-16" if README_BYTES.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8"
+LONG_DESCRIPTION = README_BYTES.decode(README_ENCODING)
 
 setup(
     name="osonbot",
-    version="1.2.5",
+    version="1.2.8",
     packages=find_packages(),
     install_requires=[
         'httpx', 'watchdog', 'pydantic'
@@ -17,5 +25,7 @@ setup(
     },
     author="Sino Farmonov",
     description="Simple Telegram bot framework with some built-in features.",
+    long_description=LONG_DESCRIPTION,
+    long_description_content_type="text/markdown",
     python_requires=">=3.8",
 )

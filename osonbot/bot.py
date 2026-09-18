@@ -19,19 +19,49 @@ class Bot:
         self.client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0), transport=httpx.HTTPTransport(retries=3))
         self.handlers = {}
         self.callback_handlers = {}
+        self.admin_handlers = {}
         self.error_handlers = {}
         self.logger = setup_logger("osonbot")
         self.auto_db = auto_db
-        self.admin_id = admin_id
+        if admin_id is not None:
+            try:
+                self.admin_id = int(admin_id)
+            except (TypeError, ValueError) as error:
+                raise ValueError("admin_id must be a numeric Telegram user ID.") from error
+        else:
+            self.admin_id = None
         if auto_db:
             self.db = Database(db_name)
             self.db.create_table("users", username=str, user_id=int)
         self.state = State()
+        if self.admin_id is not None:
+            self.admin_handlers["/admin"] = {
+                "text": "Welcome Admin!",
+                "parse_mode": None,
+                "reply_markup": KeyboardButton(["statistika📊"]),
+                "state": None,
+            }
+            self.admin_handlers["statistika📊"] = {
+                "text": self._admin_statistics,
+                "parse_mode": None,
+                "reply_markup": None,
+                "state": None,
+            }
+
+    def _admin_statistics(self, _message: Message):
+        if not self.auto_db:
+            return "Automatic database is disabled."
+        return f"Foydalanuvchilar soni: {len(self.db.get_data('users'))}"
 
     def _handle_error(self, error: Exception, context: dict = None):
         context = context or {}
         setattr(error, "_osonbot_handled", True)
-        for error_type, handler in self.error_handlers.items():
+        handlers = sorted(
+            self.error_handlers.items(),
+            key=lambda item: len(item[0].mro()),
+            reverse=True,
+        )
+        for error_type, handler in handlers:
             if isinstance(error, error_type):
                 try:
                     return handler(error, context)
@@ -48,12 +78,34 @@ class Bot:
         self.logger.error("Error occured: ", exc_info=(type(error), error, error.__traceback__))
 
     def error(self, exception: type[Exception] = Exception, handler=None):
+        """Register an error handler as a decorator or a direct call.
+
+        Decorator form::
+
+            @bot.error(TelegramAPIError)
+            def handle_api_error(error, context):
+                ...
+
+        Direct form::
+
+            bot.error(TelegramAPIError, handle_api_error)
+
+        Direct registration returns the bot so it can be chained like the
+        message registration methods.
+        """
+        if not isinstance(exception, type) or not issubclass(exception, Exception):
+            raise TypeError("exception must be an Exception subclass.")
+
         if handler is None:
             def decorator(func):
+                if not callable(func):
+                    raise TypeError("Error handler must be callable.")
                 self.error_handlers[exception] = func
                 return func
             return decorator
 
+        if not callable(handler):
+            raise TypeError("Error handler must be callable.")
         self.error_handlers[exception] = handler
         return self
 
@@ -125,9 +177,17 @@ class Bot:
             self._handle_error(e, {"request": request, "method": method})
             raise
 
-    def when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, state: str = None):
+    def when(self, condition: str | list[str], text=None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, state: str = None):
+        """Register a message handler directly or with decorator syntax."""
         if state is not None:
             self.state.resolve(state)
+
+        if text is None:
+            def decorator(func):
+                if not callable(func):
+                    raise TypeError("Message handler must be callable.")
+                return self.when(condition, func, parse_mode, reply_markup, state)
+            return decorator
 
         if condition:
             handler = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup, "state": state}
@@ -142,7 +202,15 @@ class Bot:
                 self.handlers[condition] = handler
         return self
 
-    def c_when(self, condition: str | list[str], text: str, parse_mode: str = None, reply_markup: str = None):
+    def c_when(self, condition: str | list[str], text=None, parse_mode: str = None, reply_markup: str = None):
+        """Register a callback handler directly or with decorator syntax."""
+        if text is None:
+            def decorator(func):
+                if not callable(func):
+                    raise TypeError("Callback handler must be callable.")
+                return self.c_when(condition, func, parse_mode, reply_markup)
+            return decorator
+
         if condition:
             if isinstance(condition, list):
                 for cond in condition:
@@ -376,7 +444,10 @@ class Bot:
         if not handled:
             return
 
-        self._send_handler_response(chat_id, handled['text'], handled, message)
+        response = handled['text']
+        if callable(response):
+            response = response(callback)
+        self._send_handler_response(chat_id, response, handled, message)
 
     def process_callback(self, callback):
         try:
@@ -405,22 +476,20 @@ class Bot:
             user = message.get("from", {})
             self.db.add_data("users", username=user.get("username"), user_id=user_id)
 
-        if self.admin_id:
-            if user_id == self.admin_id:
-                self.when("/admin", "Welcome Admin!", reply_markup=KeyboardButton(['statistika📊']))
-                self.when("statistika📊", f"Foydalanuvchilar soni: {len(self.db.get_data('users'))}")
-        
         if "text" in message:
             text = message.get("text", "")
             chat_id = message.get("chat", {}).get("id", user_id)
 
-            current_state = self.state.get(user_id)
-            state_key = self.state.key(current_state["group"], current_state["state"]) if current_state else None
-            if state_key and state_key in self.handlers:
-                self.state.save(user_id, text)
-                handled = self.handlers.get(state_key)
+            if user_id == self.admin_id and text in self.admin_handlers:
+                handled = self.admin_handlers[text]
             else:
-                handled = self.handlers.get(text) or self.handlers.get("*")
+                current_state = self.state.get(user_id)
+                state_key = self.state.key(current_state["group"], current_state["state"]) if current_state else None
+                if state_key and state_key in self.handlers:
+                    self.state.save(user_id, text)
+                    handled = self.handlers.get(state_key)
+                else:
+                    handled = self.handlers.get(text) or self.handlers.get("*")
             
             if not handled:
                 return
