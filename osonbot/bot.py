@@ -7,6 +7,7 @@ from .utils import (
     FileNotFoundOrInvalidURLError, OsonBotError, UnsupportedHTTPMethodError, TelegramRequestError,
     TelegramAPIError, BotStartupError, UpdateProcessingError, MessageHandlerError,
     CallbackHandlerError, FormatterError, InvalidUpdateError, HandlerReturnTypeError,
+    StateGroupNotFoundError,
     Photo, Video, Audio, Voice, Document, Sticker,
     setup_logger, 
     InlineKeyboardButton, RemoveKeyboardButton, URLKeyboardButton, KeyboardButton,
@@ -18,6 +19,7 @@ class Bot:
         self.api_url = f"https://api.telegram.org/bot{token}/"
         self.client = httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0), transport=httpx.HTTPTransport(retries=3))
         self.handlers = {}
+        self.state_handlers = {}
         self.callback_handlers = {}
         self.admin_handlers = {}
         self.error_handlers = {}
@@ -217,6 +219,39 @@ class Bot:
                     self.callback_handlers[cond] = {"text": text, 'parse_mode': parse_mode, 'reply_markup': reply_markup}
             else:
                 self.callback_handlers[condition] = {'text': text, "parse_mode": parse_mode, "reply_markup": reply_markup}
+        return self
+
+    def when_state(self, state: str, text=None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, next_state: str = None):
+        """Register a response or callable for a state without using ``when``."""
+        if not isinstance(state, str) or not state:
+            raise ValueError("state must be a non-empty string.")
+        if text is None:
+            def decorator(func):
+                if not callable(func):
+                    raise TypeError("State handler must be callable.")
+                return self.when_state(state, func, parse_mode, reply_markup, next_state)
+            return decorator
+
+        if ":" in state:
+            group, state_name = state.split(":", 1)
+            state_key = self.state.key(group, state_name)
+        else:
+            group = state
+            if group not in self.state.order:
+                raise StateGroupNotFoundError(f"State group not found: {group}")
+            state_key = self.state.key(group, self.state.order[group][-1])
+
+        if next_state is None and ":" in state:
+            next_state = self.state.next(state)
+        if next_state is not None:
+            self.state.resolve(next_state)
+
+        self.state_handlers[state_key] = {
+            "text": text,
+            "parse_mode": parse_mode,
+            "reply_markup": reply_markup,
+            "state": next_state,
+        }
         return self
 
     def get_updates(self, offset: int):
@@ -470,6 +505,7 @@ class Bot:
     
     def _process_messages(self, message):
         user_id = self._message_user_id(message)
+        self.state.active_user_id = user_id
         chat_id = message.get("chat", {}).get("id", user_id)
 
         if self.auto_db:
@@ -479,13 +515,23 @@ class Bot:
         if "text" in message:
             text = message.get("text", "")
             chat_id = message.get("chat", {}).get("id", user_id)
+            state_response_transition = False
 
             if user_id == self.admin_id and text in self.admin_handlers:
                 handled = self.admin_handlers[text]
             else:
                 current_state = self.state.get(user_id)
                 state_key = self.state.key(current_state["group"], current_state["state"]) if current_state else None
-                if state_key and state_key in self.handlers:
+                if state_key and state_key in self.state_handlers:
+                    self.state.save(user_id, text)
+                    handled = self.state_handlers[state_key]
+                    next_state = handled.get("state")
+                    if next_state is not None:
+                        self.state.set(user_id, next_state)
+                        next_key = self.state.key(next_state)
+                        handled = self.state_handlers.get(next_key, handled)
+                        state_response_transition = True
+                elif state_key and state_key in self.handlers:
                     self.state.save(user_id, text)
                     handled = self.handlers.get(state_key)
                 else:
@@ -501,7 +547,10 @@ class Bot:
             elif handled['text'] is not None:
                 self._send_handler_response(chat_id, handled['text'], handled, message)
 
-            self._apply_state_transition(user_id, handled)
+            if not state_response_transition:
+                self._apply_state_transition(user_id, handled)
+            elif handled.get("state") is None:
+                self.state.clear(user_id)
         
         elif "photo" in message:
             hv = self.handlers.get(Photo)

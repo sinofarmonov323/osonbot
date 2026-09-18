@@ -198,16 +198,22 @@ class Message(BaseModel):
 class State:
     def __init__(self, group: Optional[str] = None, **states):
         self.handlers = {}
+        self.order = {}
         self.user_state = {}
         self.user_data = {}
+        self.active_user_id = None
         if group is not None and states:
             self.add(group, *states.keys())
 
     def add(self, group: str, *states: str):
+        return self.register(group, list(states))
+
+    def register(self, group: str, columns: Optional[List[str]] = None):
         if not group or not isinstance(group, str):
             raise StateDefinitionError("State group name must be a non-empty string.")
         if group in self.handlers:
             raise StateAlreadyExistsError(f"State group already exists: {group}")
+        states = columns or []
         if not states:
             raise StateDefinitionError("You must provide at least one state.")
         if len(states) != len(set(states)):
@@ -217,6 +223,7 @@ class State:
                 raise StateDefinitionError("State names must be non-empty strings.")
 
         self.handlers[group] = {state: None for state in states}
+        self.order[group] = list(states)
         return self
     
     def add_state(self, group: str, **states):
@@ -274,7 +281,23 @@ class State:
         self.user_data.setdefault(user_id, {}).setdefault(group, self.handlers[group].copy())
         return self
 
-    def save(self, user_id: int, value: Any, state: Optional[str] = None):
+    def save(self, user_id: int, value: Any = None, state: Optional[str] = None, **values):
+        if isinstance(user_id, str) and values:
+            group = user_id
+            if group not in self.handlers:
+                raise StateGroupNotFoundError(f"State group not found: {group}")
+            active_user_id = self.active_user_id
+            if active_user_id is None:
+                raise StateNotFoundError("No active user is available for this state save.")
+            current_data = self.user_data.setdefault(active_user_id, {}).setdefault(
+                group, self.handlers[group].copy()
+            )
+            for state_name, state_value in values.items():
+                if state_name not in self.handlers[group]:
+                    raise StateNotFoundError(f"State not found: {group}:{state_name}")
+                current_data[state_name] = state_value
+            return self
+
         current = self.get(user_id)
         if not current and state is None:
             raise StateNotFoundError(f"No active state for user: {user_id}")
@@ -290,6 +313,14 @@ class State:
         self.user_data.setdefault(user_id, {}).setdefault(group, self.handlers[group].copy())
         self.user_data[user_id][group][state_name] = value
         return self
+
+    def next(self, state: str) -> Optional[str]:
+        group, state_name = self.resolve(state)
+        states = self.order[group]
+        index = states.index(state_name) + 1
+        if index >= len(states):
+            return None
+        return f"{group}:{states[index]}"
 
     def get(self, user_id: int):
         return self.user_state.get(user_id)
