@@ -10,7 +10,7 @@ LONG_DESCRIPTION = README_BYTES.decode(README_ENCODING)
 
 setup(
     name="osonbot",
-    version="1.2.8",
+    version="1.2.9",
     packages=find_packages(),
     install_requires=[
         'httpx', 'watchdog', 'pydantic'
@@ -24,7 +24,8 @@ setup(
         'userbot': ['telethon']
     },
     author="Sino Farmonov",
-    description="Simple Telegram bot framework with some built-in features.",
+    url="https://github.com/sinofarmonov323/osonbot",
+    description="Simple Telegram bot framework with some built-in features that makes the writing telegram bots easier.",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
     python_requires=">=3.8",
