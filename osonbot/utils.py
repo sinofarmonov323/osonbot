@@ -208,12 +208,12 @@ class State:
     def add(self, group: str, *states: str):
         return self.register(group, list(states))
 
-    def register(self, group: str, columns: Optional[List[str]] = None):
+    def register(self, group: str, states: Optional[List[str]] = None):
         if not group or not isinstance(group, str):
             raise StateDefinitionError("State group name must be a non-empty string.")
         if group in self.handlers:
             raise StateAlreadyExistsError(f"State group already exists: {group}")
-        states = columns or []
+        states = states or []
         if not states:
             raise StateDefinitionError("You must provide at least one state.")
         if len(states) != len(set(states)):
