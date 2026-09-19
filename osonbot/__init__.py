@@ -8,7 +8,10 @@ from .utils import (
     StateAlreadyExistsError, StateDefinitionError, StateGroupNotFoundError, StateNotFoundError,
     StateAmbiguousError,
 )
-# from userbot import UserBot
+
+__version__ = "1.2.9"
+__author__ = "Sino Farmonov" # i am not well known
+__description__ = "Simple Telegram bot framework for building fast, expressive bot handlers."
 
 __all__ = [
     "Bot",
@@ -21,4 +24,7 @@ __all__ = [
     "HandlerReturnTypeError", "StateError",
     "StateAlreadyExistsError", "StateDefinitionError", "StateGroupNotFoundError", "StateNotFoundError",
     "StateAmbiguousError",
+    "__version__",
+    "__author__",
+    "__description__",
 ]

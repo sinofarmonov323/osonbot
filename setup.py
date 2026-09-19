@@ -13,7 +13,9 @@ setup(
     version="1.2.9",
     packages=find_packages(),
     install_requires=[
-        'httpx', 'watchdog', 'pydantic'
+        'httpx',
+        'watchdog',
+        'pydantic',
     ],
     entry_points={
         "console_scripts": [
@@ -21,12 +23,42 @@ setup(
         ],
     },
     extras_require={
-        'userbot': ['telethon']
+        'userbot': ['telethon'],
     },
     author="Sino Farmonov",
+    author_email="sinofarmonov323@gmail.com",
     url="https://github.com/sinofarmonov323/osonbot",
-    description="Simple Telegram bot framework with some built-in features that makes the writing telegram bots easier.",
+    project_urls={
+        "Documentation": "https://github.com/sinofarmonov323/osonbot#readme",
+        "Source": "https://github.com/sinofarmonov323/osonbot",
+        "Tracker": "https://github.com/sinofarmonov323/osonbot/issues",
+    },
+    description="Simple Telegram bot framework for building Telegram bots with handlers, states and media support.",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
+    keywords=[
+        "telegram",
+        "telegram-bot",
+        "bot-framework",
+        "python",
+        "asyncio",
+        "state-machine",
+        "chatbot",
+    ],
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Topic :: Communications :: Chat",
+        "Topic :: Software Development :: Libraries",
+    ],
     python_requires=">=3.8",
+    include_package_data=True,
 )
