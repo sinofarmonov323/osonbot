@@ -4,27 +4,21 @@ from pydantic import BaseModel, Field
 
 
 class OsonBotError(Exception):
-    """Base exception for osonbot errors."""
     pass
 
 class FileNotFoundOrInvalidURLError(OsonBotError):
-    """Raised when a file does not exist or the provided URL is invalid."""
     pass
 
 class BotConfigurationError(OsonBotError):
-    """Raised when the bot is configured incorrectly."""
     pass
 
 class UnsupportedHTTPMethodError(OsonBotError):
-    """Raised when an unsupported HTTP method is used."""
     pass
 
 class TelegramRequestError(OsonBotError):
-    """Raised when Telegram cannot be reached."""
     pass
 
 class TelegramAPIError(OsonBotError):
-    """Raised when Telegram returns an unsuccessful API response."""
 
     def __init__(self, method: str, description: str = None, status_code: int = None, response: dict = None):
         self.method = method
@@ -34,55 +28,42 @@ class TelegramAPIError(OsonBotError):
         super().__init__(self.description)
 
 class BotStartupError(OsonBotError):
-    """Raised when the bot cannot start."""
     pass
 
 class UpdateProcessingError(OsonBotError):
-    """Raised when an update cannot be processed."""
     pass
 
 class MessageHandlerError(UpdateProcessingError):
-    """Raised when a message handler fails."""
     pass
 
 class CallbackHandlerError(UpdateProcessingError):
-    """Raised when a callback handler fails."""
     pass
 
 class FormatterError(OsonBotError):
-    """Raised when message formatting fails."""
     pass
 
 class InvalidUpdateError(UpdateProcessingError):
-    """Raised when an incoming Telegram update has an invalid shape."""
     pass
 
 class HandlerReturnTypeError(UpdateProcessingError):
-    """Raised when a handler returns an unsupported value."""
     pass
 
 class StateError(OsonBotError):
-    """Base exception for state-related errors."""
     pass
 
 class StateAlreadyExistsError(StateError):
-    """Raised when a state group already exists."""
     pass
 
 class StateDefinitionError(StateError):
-    """Raised when a state group definition is invalid."""
     pass
 
 class StateGroupNotFoundError(StateError):
-    """Raised when a state group does not exist."""
     pass
 
 class StateNotFoundError(StateError):
-    """Raised when a state name does not exist in any state group."""
     pass
 
 class StateAmbiguousError(StateError):
-    """Raised when a bare state name exists in multiple groups."""
     pass
 
 def KeyboardButton(

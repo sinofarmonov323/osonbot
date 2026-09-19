@@ -8,7 +8,6 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 class RestartOnChange(FileSystemEventHandler):
-    """Restarts a subprocess when the target file is modified."""
 
     def __init__(self, file):
         self.file = str(Path(file).resolve())

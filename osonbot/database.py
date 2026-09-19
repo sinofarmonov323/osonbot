@@ -52,7 +52,6 @@ class Database:
             cur = conn.cursor()
             cur.execute(create_sql)
 
-        # If table already existed, make sure missing columns are added
         if self._table_exists(table_name):
             existing = self._get_existing_columns(table_name)
             # For each requested column not present, add it
@@ -64,10 +63,6 @@ class Database:
                         conn.execute(alter_sql)
     
     def overwrite_default_table(self, table_name: str, **columns: type):
-        """
-        Drops the table (if exists) and creates it with the given columns.
-        WARNING: This destroys existing data in that table.
-        """
         if not columns:
             raise ValueError("You must provide at least one column.")
         drop_sql = f"DROP TABLE IF EXISTS {table_name};"

@@ -80,21 +80,6 @@ class Bot:
         self.logger.error("Error occured: ", exc_info=(type(error), error, error.__traceback__))
 
     def error(self, exception: type[Exception] = Exception, handler=None):
-        """Register an error handler as a decorator or a direct call.
-
-        Decorator form::
-
-            @bot.error(TelegramAPIError)
-            def handle_api_error(error, context):
-                ...
-
-        Direct form::
-
-            bot.error(TelegramAPIError, handle_api_error)
-
-        Direct registration returns the bot so it can be chained like the
-        message registration methods.
-        """
         if not isinstance(exception, type) or not issubclass(exception, Exception):
             raise TypeError("exception must be an Exception subclass.")
 
@@ -180,7 +165,6 @@ class Bot:
             raise
 
     def when(self, condition: str | list[str], text=None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, state: str = None):
-        """Register a message handler directly or with decorator syntax."""
         if state is not None:
             self.state.resolve(state)
 
@@ -205,7 +189,6 @@ class Bot:
         return self
 
     def c_when(self, condition: str | list[str], text=None, parse_mode: str = None, reply_markup: str = None):
-        """Register a callback handler directly or with decorator syntax."""
         if text is None:
             def decorator(func):
                 if not callable(func):
@@ -222,7 +205,6 @@ class Bot:
         return self
 
     def when_state(self, state: str, text=None, parse_mode: str = None, reply_markup: Union[KeyboardButton, InlineKeyboardButton, URLKeyboardButton, None] = None, next_state: str = None):
-        """Register a response or callable for a state without using ``when``."""
         if not isinstance(state, str) or not state:
             raise ValueError("state must be a non-empty string.")
         if text is None:
